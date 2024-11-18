@@ -55,7 +55,7 @@ def get_input_data(protein_path,
         ref_ligand = make_dummy_mol_with_coordinate(pocket_coord)
     else: # use input_ligand paths
         print('Neither ref_ligand nor pocket_coord is provided for pocket extraction. Use input_ligand as reference.')
-        assert input_ligand is not None and input_ligand.endswith('.sdf'), 'Only sdf input_ligand can be used for pocket extraction.'
+        assert input_ligand is not None and (input_ligand.endswith('.sdf') or input_ligand.endswith('.pdb')), 'Only SDF/PDB input_ligand can be used for pocket extraction.'
         ref_ligand = input_ligand
     pocket_pdb = extract_pocket(protein_path, ref_ligand, 
                             radius=pocket_args.get('radius', 10),
@@ -80,7 +80,7 @@ def get_input_data(protein_path,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config_task', type=str, default='configs/sample/examples/growing_unfixed_frag.yml', help='task config')
+    parser.add_argument('--config_task', type=str, default='configs/sample/examples/dock_pep_know_some.yml', help='task config')
     parser.add_argument('--config_model', type=str, default='configs/sample/pxm.yml', help='model config')
     parser.add_argument('--outdir', type=str, default='./outputs_use')
     parser.add_argument('--device', type=str, default='cuda:1')

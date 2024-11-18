@@ -19,7 +19,6 @@ from models.corrector import correct_pos_batch, kabsch_flatten, correct_pos_batc
 from utils.data import Mol3DData
 from utils.prior import MolPrior
 from utils.info_level import MolInfoLevel
-from utils.train_noise import get_vector, get_vector_list, combine_vectors_indexed
 from utils.shape import get_points_from_letter
 
 SAMPLE_NOISE_DICT = {}
@@ -212,20 +211,14 @@ class BaseSampleNoiser:
             print('Force fixed_node to be fixed')
             is_fixed = (batch['fixed_node']==1)
             in_dict['node'][is_fixed] = batch.node_type[is_fixed]
-        assert (batch.node_pos[(batch['fixed_pos']==1)]
-                - in_dict['pos'][batch['fixed_pos']==1]).abs().sum() < 1e-4
+        # assert (batch.node_pos[(batch['fixed_pos']==1)]
+        #         - in_dict['pos'][batch['fixed_pos']==1]).abs().sum() < 1e-4
+        if not (batch.node_pos[(batch['fixed_pos']==1)]
+                - in_dict['pos'][batch['fixed_pos']==1]).abs().sum() < 1e-4:
+            in_dict['pos'][batch['fixed_pos']==1] = batch.node_pos[batch['fixed_pos']==1]
         assert (batch.halfedge_type[batch['fixed_halfedge']==1]
                 ==  in_dict['halfedge'][batch['fixed_halfedge']==1]).all()
-        
-        # fixed_halfedge_index = batch['halfedge_index'][:, batch['fixed_halfdist']==1]
-        # batch_dist = torch.norm(
-        #     node_pos_protect[fixed_halfedge_index[0]] - node_pos_protect[fixed_halfedge_index[1]],
-        #     p=2, dim=-1)
-        # in_dist = torch.norm(
-        #     in_dict['pos'][fixed_halfedge_index[0]] - in_dict['pos'][fixed_halfedge_index[1]],
-        #     p=2, dim=-1)
-        # assert (batch_dist - in_dist).abs().max() < 1e-4, 'fixed_halfdist not consistent'
-        
+
         batch.update({f'{key}_in':value for key, value in in_dict.items()})
         
         return batch
@@ -707,7 +700,7 @@ class ConfSampleNoiser(BaseSampleNoiser):
             else:
                 raise NotImplementedError('not implemented for pre_process:', self.pre_process)
         return in_dict
-    
+
     def outputs2batch(self, batch, outputs):
         
         if self.post_process is None:
@@ -720,7 +713,46 @@ class ConfSampleNoiser(BaseSampleNoiser):
                 pred_pos = correct_pos_batch_no_tor(batch, outputs)
             else:
                 pred_pos = outputs['pred_pos']
-        else:
+        elif isinstance(self.post_process, dict):  # for use
+            pred_pos = outputs['pred_pos'].clone()
+            name = self.post_process.name
+            assert name == 'know_some', 'Only know_some post_process is supported.'
+            num_mols = batch['node_type_batch'].max() + 1
+            num_nodes = batch['num_nodes'] // num_mols
+
+            step = batch['step']
+            if step > 0.2:  # directly fixed
+                if 'orig_fixed_pos' not in batch:
+                    self.pre_process = 'fix_some'  # fix the some atoms
+                    batch['orig_fixed_pos'] = batch['fixed_pos'].clone()
+                    for i_batch in range(num_mols):
+                        for one_setting in self.post_process.atom_space:
+                            atom_index = one_setting['atom'] + num_nodes * i_batch
+                            batch['fixed_pos'][atom_index] = 1
+                            # modify the coord
+                            if 'coord' in one_setting:
+                                coord = torch.tensor(one_setting['coord'], dtype=batch['node_pos'].dtype, device=batch['node_pos'].device)
+                                coord -= batch['pocket_center'][i_batch]
+                                batch['node_pos'][atom_index] = coord
+            else:
+                # reset fixed_pos
+                if 'orig_fixed_pos' in batch:
+                    self.pre_process = None
+                    batch['fixed_pos'] = batch['orig_fixed_pos']
+                for i_batch in range(num_mols):
+                    for one_setting in self.post_process.atom_space:
+                        atom_index = one_setting['atom'] + num_nodes * i_batch
+                        radius = one_setting['radius']
+                        if 'coord' in one_setting: # check equal to gt_node_pos
+                            coord = torch.tensor(one_setting['coord'], dtype=batch['node_pos'].dtype, device=batch['node_pos'].device)
+                            coord -= batch['pocket_center'][i_batch]
+                        else:
+                            coord = batch['gt_node_pos'][atom_index]
+                        # correct pos
+                        dist = torch.norm(pred_pos[atom_index] - coord, dim=-1)
+                        if dist > radius:  # move
+                            pred_pos[atom_index] = coord
+        else:  # str
             if self.post_process == 'correct_pos':  # correct pos just like flex mode
                 corr_config = self.config.get('correct_pos', None)
                 interval_steps = corr_config['interval_steps']
@@ -796,7 +828,6 @@ class ConfSampleNoiser(BaseSampleNoiser):
                 pred_pos = batch['pos_in'].clone()
             else:
                 raise NotImplementedError('not implemented for post_process:', self.post_process)
-            
             
         fixed_pos = (batch['fixed_pos'] == 1)
         pred_pos[fixed_pos] = batch['node_pos'][fixed_pos].clone()
@@ -1259,7 +1290,7 @@ class MaskfillSampleNoiser(BaseSampleNoiser):
                 'fixed_halfedge': fixed_halfedge,
                 'fixed_halfdist': fixed_halfdist,
             })
-        elif ar_strategy == 'juan':
+        elif ar_strategy == 'refine_partial':
             batch_node = batch['node_type_batch']
             # mol_size = batch_node.bincount()[batch_node]
 
@@ -1336,85 +1367,7 @@ class MaskfillSampleNoiser(BaseSampleNoiser):
                 # 'node_pos': outputs['pred_pos'],
                 # 'halfedge_type': outputs['pred_halfedge'].argmax(-1),
             })
-        elif ar_strategy == 'yiqijuan':  # juan with neighbor. deprecated. use yiqijuan2
-            batch_node = batch['node_type_batch']
-            node_pos = outputs['pred_pos']
-            # get config
-            threshold_node = ar_config.threshold_node
-            threshold_pos = ar_config.threshold_pos
-            threshold_bond = ar_config.threshold_bond
-            max_ar_step = ar_config.max_ar_step
-            max_p2_ratio = ar_config.get('max_p2_ratio', 1)
-            change_init_step = ar_config.get('change_init_step', None)
-            if change_init_step is not None:
-                self.init_step = change_init_step
-            r = ar_config.r
-
-            # select center
-            cfd_pos = torch.sigmoid(outputs['confidence_pos'][:, 0])
-            cfd_node = torch.sigmoid(outputs['confidence_node'][:, 0])
-            cfd_pos = torch.sigmoid(outputs['confidence_pos'][:, 0])
-            cfd_halfedge = torch.sigmoid(outputs['confidence_halfedge'][:, 0])
-    
-            # edge to bond, get cfd_node_with_bond
-            halfedge_index = batch['halfedge_index']
-            pred_halfedge = outputs['pred_halfedge'].argmax(-1)
-            is_halfbond = (pred_halfedge > 0)
-            halfbond_index = halfedge_index[:, is_halfbond]
-            cfd_halfbond = cfd_halfedge[is_halfbond]
-            bond_index = torch.cat([halfbond_index, halfbond_index.flip(0)], dim=-1)
-            cfd_bond = torch.cat([cfd_halfbond, cfd_halfbond], dim=0)
-            cfd_node_with_bond = scatter_mean(cfd_bond, bond_index[0], dim=0, dim_size=batch['node_type'].shape[0])
-            
-            is_center_p2 = (
-                (cfd_node <= threshold_node) |
-                (cfd_pos <= threshold_pos) |
-                (cfd_node_with_bond <= threshold_bond)
-            )
-            index_min_cfd_pos = scatter_min(cfd_pos, batch_node, dim=0, dim_size=batch_node.max()+1)[1]
-            is_center_p2[index_min_cfd_pos] = True
-            center_pos = node_pos[is_center_p2]
-            batch_center = batch_node[is_center_p2]
-            # select neighbor
-            assign_index = radius(x=node_pos, y=center_pos, r=r,
-                                  batch_x=batch_node, batch_y=batch_center)
-            sel_node_curr_p2 = torch.unique(assign_index[1])
-
-            if step_ar >= max_ar_step:
-                sel_node_curr_p2 = []
-            
-            is_node_p2 = torch.zeros_like(batch_node, dtype=torch.bool)
-            is_node_p2[sel_node_curr_p2] = True
-            is_node_p1 = ~is_node_p2
-            # print('is_node_p2', is_node_p2.sum().item())
-            
-            # change node_p1 and node_p2
-            node_p1 = torch.nonzero(is_node_p1).squeeze(-1)
-            node_p2 = torch.nonzero(is_node_p2).squeeze(-1)
-            
-            # change halfedge_p1, halfedge_p2, halfedge_p1p2
-            halfedge_index = batch['halfedge_index']
-            left_in_p1 = is_node_p1[halfedge_index[0]]
-            right_in_p1 = is_node_p1[halfedge_index[1]]
-            is_halfedge_p1 = left_in_p1 & right_in_p1
-            is_halfedge_p2 = (~left_in_p1) & (~right_in_p1)
-            is_halfedge_p1p2 = (~is_halfedge_p1) & (~is_halfedge_p2)
-            halfedge_p1 = torch.nonzero(is_halfedge_p1).squeeze(-1)
-            halfedge_p2 = torch.nonzero(is_halfedge_p2).squeeze(-1)
-            halfedge_p1p2 = torch.nonzero(is_halfedge_p1p2).squeeze(-1)
-
-            batch.update({
-                'node_p1': node_p1,
-                'node_p2': node_p2,
-                'halfedge_p1': halfedge_p1,
-                'halfedge_p2': halfedge_p2,
-                'halfedge_p1p2': halfedge_p1p2,
-                
-                # 'node_type': outputs['pred_node'].argmax(-1),
-                # 'node_pos': outputs['pred_pos'],
-                # 'halfedge_type': outputs['pred_halfedge'].argmax(-1),
-            })
-        elif ar_strategy == 'yiqijuan2':  # juan (involution) with neighbor 
+        elif ar_strategy == 'refine':  # juan (involution) with neighbor 
             batch_node = batch['node_type_batch']
             node_pos = outputs['pred_pos']
             # get config

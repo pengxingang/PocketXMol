@@ -20,7 +20,6 @@ from torch.optim.optimizer import Optimizer
 from torch_geometric.data import Batch
 from torch_geometric.loader import DataLoader
 torch.set_float32_matmul_precision('medium')
-# from torch.utils.data import get_worker_info
 
 sys.path.append('.')
 from models.maskfill import PMAsymDenoiser
@@ -29,7 +28,6 @@ from utils.dataset import ForeverTaskDataset
 from utils.transforms import FeaturizeMol, Compose, get_transforms, FeaturizePocket
 from utils.misc import *
 from utils.train import get_optimizer, get_scheduler, GradualWarmupScheduler
-# from utils.train_noise import get_train_noiser
 from utils.sample_noise import get_sample_noiser
 
 

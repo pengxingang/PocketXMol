@@ -45,7 +45,7 @@ noise:
   name: maskfill
   num_steps: 100
   ar_config:
-    strategy: yiqijuan2
+    strategy: refine
     r: 3
     threshold_node: 0.98
     threshold_pos: 0.91

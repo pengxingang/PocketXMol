@@ -1,0 +1,57 @@
+
+sample:
+  seed: 2024
+  batch_size: 50
+  num_mols: 100
+  save_traj_prob: 0.02
+
+
+data:
+  protein_path: data/examples/peptide/3bik_A.pdb
+  input_ligand: data/examples/peptide/P73.pdb
+  pocket_args:
+    radius: 20
+  pocmol_args:
+    data_id: dockpep_fix_some
+    pdbid: 3bik
+
+
+transforms:
+  featurizer_pocket:
+    center: [7.9130, -7.3910, -25.9240]  # space center for denosing
+
+
+
+# The following defines docking task (Gaussian noise)
+# with some atoms restricted to known spaces (specified in noise/post_process)
+
+task:
+  name: dock
+  transform:
+    name: dock
+    settings:
+      free: 1
+      flexible: 0
+
+
+noise:
+  name: dock
+  num_steps: 100
+  prior: from_train
+  level:
+    name: advance
+    min: 0.
+    max: 1.
+    step2level:
+      scale_start: 0.99999
+      scale_end: 0.00001
+      width: 3
+  post_process:
+    name: know_some
+    # specify atom indices (index counts from 0) and restricted sphere spaces
+    atom_space:
+      - atom: 0
+        coord: [-3.522, -13.459, -21.684]
+        radius: 2
+      - atom: 4  # if not set `coord`, use the corresponding coord in the input_ligand file
+        radius: 2

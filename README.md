@@ -279,6 +279,8 @@ The configuration files are in `configs/sample/examples`, including:
     - `dock_smallmol_flex.yml`: dock a small molecule to a protein pocket using flexible noise
     - `dock_smallmol_84663.yml`: dock the molecule 84663 to caspase-9
     - `dock_pep.yml`: dock a peptide to a protein pocket
+    - `dock_pep_fix_some.yml`: dock, with fixed coordinates of some atoms
+    - `dock_pep_know_som.yml`: dock, with constrained coordinates of some atoms
 - Small molecule design
     - `sbdd.yml`: design drug-like molecules for protein pocket
     - `growing_unfixed_frag.yml`: fragment growing with unfixed fragment pose, i.e., design small molecules containing a specified fragment graph for protein pocket

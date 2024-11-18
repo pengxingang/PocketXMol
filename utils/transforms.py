@@ -978,7 +978,7 @@ class ConfTransform:
         data = self.set_torsional_feat(data, setting)
         
         # for the sample mode, prepare init data
-        if self.mode == 'test':
+        if self.mode != 'train':
             data = self.prepare_sample(data, setting)
             
         if self.mode != 'train':
@@ -1169,23 +1169,44 @@ class ConfTransform:
         })
         
         if self.fix_some is not None:
-            if self.fix_some == 'endres':  # fix the end residue, they cannot be moved
-                peptide_res_index = data['peptide_res_index']
-                is_endres = (peptide_res_index == 0) | (peptide_res_index == peptide_res_index.max())
-                fixed_pos[is_endres] = 1
-            elif self.fix_some == 'endresbb':  # fix the end residue bb., they cannot be moved
-                peptide_res_index = data['peptide_res_index']
-                is_endres = (peptide_res_index == 0) | (peptide_res_index == peptide_res_index.max())
-                is_backbone = data['peptide_is_backbone']
-                is_endresbb = is_endres & is_backbone
-                fixed_pos[is_endresbb] = 1
-            elif self.fix_some == 'bb':
-                is_backbone = data['peptide_is_backbone']
-                fixed_pos[is_backbone] = 1
-            elif self.fix_some == 'firstres':
-                peptide_res_index = data['peptide_res_index']
-                is_first = (peptide_res_index == 0)
-                fixed_pos[is_first] = 1
+            if isinstance(self.fix_some, str):
+                if self.fix_some == 'endres':  # fix the end residue, they cannot be moved
+                    peptide_res_index = data['peptide_res_index']
+                    is_endres = (peptide_res_index == 0) | (peptide_res_index == peptide_res_index.max())
+                    fixed_pos[is_endres] = 1
+                elif self.fix_some == 'endresbb':  # fix the end residue bb., they cannot be moved
+                    peptide_res_index = data['peptide_res_index']
+                    is_endres = (peptide_res_index == 0) | (peptide_res_index == peptide_res_index.max())
+                    is_backbone = data['peptide_is_backbone']
+                    is_endresbb = is_endres & is_backbone
+                    fixed_pos[is_endresbb] = 1
+                elif self.fix_some == 'bb':
+                    is_backbone = data['peptide_is_backbone']
+                    fixed_pos[is_backbone] = 1
+                elif self.fix_some == 'firstres':
+                    peptide_res_index = data['peptide_res_index']
+                    is_first = (peptide_res_index == 0)
+                    fixed_pos[is_first] = 1
+            elif isinstance(self.fix_some, dict):
+                fixed_atom_indices = np.array(self.fix_some.get('atom', []))
+                if fixed_atom_indices.max() > data['num_nodes']-1:
+                    num_nodes = data['num_nodes']
+                    raise ValueError(f'Indices in fix_some out of range. There are {num_nodes} atoms. Max allowed index is {num_nodes-1}.')
+                res_bb = self.fix_some.get('res_bb', [])
+                res_sc = self.fix_some.get('res_sc', [])
+                if res_bb or res_sc:
+                    peptide_res_index = np.array(data['peptide_res_index'], dtype=np.int32)
+                    is_backbone = np.array(data['peptide_is_backbone'], dtype=bool)
+                    is_sel_res_bb = ((peptide_res_index[:, None] == np.array(res_bb)[None]).any(-1)
+                                        & is_backbone)
+                    is_sel_res_sc = ((peptide_res_index[:, None] == np.array(res_sc)[None]).any(-1)
+                                        & (~is_backbone))
+                    add_atoms_indices = np.nonzero(is_sel_res_bb | is_sel_res_sc)[0]
+                    fixed_atom_indices = np.concatenate([fixed_atom_indices, add_atoms_indices])
+                    
+                fixed_atom_indices = np.unique(fixed_atom_indices)
+                print('fix atoms with indices:', fixed_atom_indices)
+                fixed_pos[fixed_atom_indices] = 1
             else:
                 raise NotImplementedError(f'unknown fix_some {self.fix_some}')
             data.update({
