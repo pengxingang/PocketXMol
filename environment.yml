@@ -1,0 +1,35 @@
+name: pxm
+channels:
+  - nvidia
+  - pyg
+  - pytorch
+  - bioconda
+  - conda-forge
+dependencies:
+  # pytorch-related packages. for CUDA 11.7
+  - pytorch=2.0.0
+  - pytorch-cuda=11.7
+  - pyg=2.3
+  - lightning
+  - torch-scatter
+  # other packages
+  - easydict=1.9
+  - numpy=1.24
+  - openbabel=3.1.1
+  - pandas=1.5.2
+  - pip=23.3.1
+  - python=3.8
+  - python-lmdb=1.2.1
+  - pyyaml=5.4.1
+  - tqdm=4.64.0
+  - rdkit=2023.9.3
+  - biopython=1.83
+  - networkx=2.8
+  - setuptools<70
+  - scikit-learn=1.1.0
+  - scipy=1.8.0
+  - seaborn=0.12.1
+  - tensorboard
+  - pip:
+    - peptidebuilder==1.1.0
+    - torch-cluster

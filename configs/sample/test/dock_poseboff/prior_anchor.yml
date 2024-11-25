@@ -1,0 +1,47 @@
+
+sample:
+  seed: 10831
+  batch_size: 400
+  num_repeats: 50
+  save_traj_prob: 0.001
+  save_output: ['confidence_pos', 'confidence_node', 'confidence_halfedge',] # 'pred_node', 'pred_halfedge']
+
+noise:
+  name: dock
+  num_steps: 100
+  post_process: correct_closest
+  correct_closest:
+    radius: 2
+  prior: from_train
+  level:
+    name: advance
+    min: 0.
+    max: 1.
+    step2level:
+      scale_start: 0.99999
+      scale_end: 0.00001
+      width: 3
+
+data:
+  dataset:
+    root: ./data
+    assembly_path: test/assemblies/lmdb/dock_poseboff.lmdb
+    dbs:
+    - name: poseboff
+      lmdb_root: poseboff/lmdb
+      lmdb_path:
+        pocmol10: pocmol10.lmdb
+  transforms:
+    - name: overwrite_start_pos
+      start_mol_path: data/poseboff/files/mols
+      appendix: _mol_start.sdf
+      center_policy: unknown
+
+task:
+  name: dock
+  db: poseboff
+  transform:
+    name: dock
+    settings:
+      free: 1
+      flexible: 0

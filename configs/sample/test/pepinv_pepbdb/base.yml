@@ -1,0 +1,64 @@
+
+sample:
+  seed: 2024
+  batch_size: 100
+  num_repeats: 200
+  save_traj_prob: 0.0
+
+transforms:
+  variable_sc_size:
+    name: variable_sc_size
+    applicable_tasks: ['pepdesign']
+    num_atoms_distri:
+      mean: 8
+      std:
+        coef: 0.3817
+        bias: 1.8727
+
+
+noise:
+  name: pepdesign
+  num_steps: 100
+  prior:
+    bb: from_train
+    sc: from_train
+  level:
+    bb:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+    sc:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+
+data:
+  dataset:
+    root: ./data
+    assembly_path: test/assemblies/pepdesign_pepbdb.csv
+    dbs:
+    - name: pepbdb
+      lmdb_root: pepbdb/lmdb
+      lmdb_path:
+        pocmol10: pocmol10.lmdb
+        peptide: peptide.lmdb
+
+task:
+  name: pepdesign
+  db: pepbdb
+  transform:
+    name: pepdesign
+    settings:
+      mode:
+        full: 0
+        sc: 1
+        packing: 0
+

@@ -1,0 +1,63 @@
+sample:
+  seed: 2024
+  batch_size: 101
+  num_repeats: 100
+  save_traj_prob: 0.0
+
+transforms:
+  variable_mol_size:
+    name: variable_mol_size
+    num_atoms_distri:
+      strategy: pocket_atoms_based
+      mean:
+        coef: 0.05924407
+        bias: 0.1478300335619629
+      std:
+        coef: 0
+        bias: 6.303689641435993
+      min: 5
+
+noise:
+  name: maskfill
+  num_steps: 100
+  ar_config:
+    strategy: yiqijuan2
+    r: 3
+    threshold_node: 0.98
+    threshold_pos: 0.91
+    threshold_bond: 0.98
+    max_ar_step: 10
+    change_init_step: 1
+  prior:
+    part1: from_train
+    part2: from_train
+  level:
+    part1:
+      name: uniform
+      min: 0.6
+      max: 1.0
+    part2:
+      name: advance
+      min: 0.0
+      max: 1.0
+      step2level:
+        scale_start: 0.99999
+        scale_end: 1.0e-05
+        width: 3
+data:
+  dataset:
+    root: ./data
+    assembly_path: test/assemblies/lmdb/sbdd_csd.lmdb
+    dbs:
+    - name: csd
+      lmdb_root: csd/lmdb
+      lmdb_path:
+        pocmol10: pocmol10.lmdb
+        torsion: torsion.lmdb
+        decom: decom.lmdb
+task:
+  name: sbdd
+  db: csd
+  transform:
+    name: ar
+    part1_pert: small

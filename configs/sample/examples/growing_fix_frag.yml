@@ -1,0 +1,90 @@
+
+sample:
+  seed: 2024
+  batch_size: 100
+  num_mols: 100
+  num_repeats: 1
+  save_traj_prob: 0.02
+
+transforms:
+  variable_mol_size:  # variable mol size
+    name: variable_mol_size
+    num_atoms_distri:
+      strategy: mol_atoms_based  # mol size from Normal(mean=28, std=2)
+      mean:
+        coef: 0
+        bias: 28
+      std:
+        coef: 0
+        bias: 2
+      min: 5
+
+noise:
+  name: maskfill
+  num_steps: 100
+  prior:
+    part1:
+      pos_only: True
+      pos: 
+        name: allpos
+        pos:
+          name: gaussian_simple
+          sigma_max: 1
+        translation:
+          name: translation
+          ve: False
+          mean: 0
+          std: 1
+        rotation:
+          name: rotation
+          sigma_max: 0.0002
+        torsional:
+          name: torsional
+          sigma_max: 0.2
+    part2:
+      node: 
+        name: categorical
+        prior_type: predefined
+        prior_probs: [3, 2, 2, 2, 1, 1, 1, 0.3, 0.3, 0.3, 0.3, 13.2]
+      pos: 
+        name: allpos
+        pos:
+          name: gaussian_simple
+          sigma_max: 1
+      edge: 
+        name: categorical
+        prior_type: tomask_half
+  level:
+    part1:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+    part2:
+      name: advance
+      min: 0.0
+      max: 1.0
+      step2level:
+        scale_start: 0.99999
+        scale_end: 1.0e-05
+        width: 3
+data:
+  protein_path: data/examples/smallmol/2ar9_A.pdb
+  mol_path: data/examples/smallmol/fragment.sdf
+  args:  # for function `process_raw`
+    radius: 13
+  
+task:
+  name: maskfill
+  transform:
+    name: maskfill
+    preset_partition:
+      grouped_node_p1: [[0, 1, 2, 3, 4, 5, 6]]  # atom indices of initial fragment
+    settings:
+      part1_pert:
+        fixed: 1
+      known_anchor:
+        none: 1

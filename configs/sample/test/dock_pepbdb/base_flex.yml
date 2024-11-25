@@ -1,0 +1,39 @@
+
+sample:
+  seed: 10599
+  batch_size: 100
+  num_repeats: 50
+  save_traj_prob: 0.0001
+
+noise:
+  name: dock
+  num_steps: 100
+  prior: from_train
+  level:
+    name: advance
+    min: 0.
+    max: 1.
+    step2level:
+      scale_start: 0.99999
+      scale_end: 0.00001
+      width: 3
+
+data:
+  dataset:
+    root: ./data
+    assembly_path: test/assemblies/lmdb/dock_pepbdb.lmdb
+    dbs:
+    - name: pepbdb
+      lmdb_root: pepbdb/lmdb
+      lmdb_path:
+        pocmol10: pocmol10.lmdb
+        peptide: peptide.lmdb
+
+task:
+  name: dock
+  db: pepbdb
+  transform:
+    name: dock
+    settings:
+      free: 0
+      flexible: 1

@@ -1,0 +1,52 @@
+
+sample:
+  seed: 2024
+  batch_size: 500
+  num_repeats: 100
+  save_traj_prob: 0.02
+
+noise:
+  name: maskfill
+  num_steps: 100
+  prior:
+    part1:
+      from_train
+    part2:
+      from_train
+  level:
+    part1:
+      name: uniform
+      min: 0.7
+      max: 1.
+    part2:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+
+data:
+  dataset:
+    root: ./data
+    assembly_path: test/assemblies/lmdb/linking_moad.lmdb
+    dbs:
+    - name: moad
+      lmdb_root: moad/lmdb
+      lmdb_path:
+        pocmol10: pocmol10.lmdb
+        torsion: torsion.lmdb
+        decom: decom.lmdb
+        linking: linking.lmdb
+
+task:
+  name: linking
+  db: moad
+  transform:
+    name: linking
+    settings:
+      part1_pert:
+        fixed: 1
+      known_anchor:
+        all: 1

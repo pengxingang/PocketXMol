@@ -1,0 +1,53 @@
+
+sample:
+  seed: 2024
+  batch_size: 500
+  num_repeats: 30
+  save_traj_prob: 0.0
+  overwrite_pos_repeat:
+    starategy: linking_unfixed
+    file_dir: data/test/linking/for_benchmark/pert_fragpos/protacdb/lv4
+
+noise:
+  name: maskfill
+  num_steps: 100
+  prior:
+    part1:
+      from_train
+    part2:
+      from_train
+  level:
+    part1:
+      name: uniform
+      min: 0.1
+      max: 1.
+    part2:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+
+data:
+  dataset:
+    root: ./data
+    assembly_path: test/assemblies/linking_protacdb.csv
+    dbs:
+    - name: protacdb
+      lmdb_root: protacdb/lmdb
+      lmdb_path:
+        mols: mols.lmdb
+        linking: linking.lmdb
+
+task:
+  name: linking
+  db: protacdb
+  transform:
+    name: linking
+    settings:
+      part1_pert:
+        free: 1
+      known_anchor:
+        all: 1

@@ -1,0 +1,40 @@
+
+sample:
+  seed: 2024
+  batch_size: 1100
+  num_mols: 1000
+  num_repeats: 4
+  save_traj_prob: 0.0
+
+noise:
+  name: denovo
+  num_steps: 100
+  prior: from_train
+  level:
+    name: advance
+    min: 0.
+    max: 1.
+    step2level:
+      scale_start: 0.99999
+      scale_end: 0.00001
+      width: 3
+
+data:
+  dataset:
+    root: ./data
+    assembly_path: test/assemblies/denovo_geom.csv
+    dbs:
+    - name: geom
+      lmdb_root: geom/lmdb
+      lmdb_path:
+        mols: mols.lmdb
+        torsion: torsion.lmdb
+        decom: decom.lmdb
+  split: val  # denovo task. use val set for test. just use the mol size info.
+
+task:
+  name: denovo
+  db: geom
+  datatask: design
+  transform:
+    name: denovo

@@ -1,0 +1,53 @@
+
+sample:
+  seed: 2024
+  batch_size: 1100
+  num_mols: 1000
+  num_repeats: 4
+  save_traj_prob: 0.0
+
+noise:
+  name: maskfill
+  num_steps: 30  # 
+  ar_config:
+    ref_prob_type: cfd_pos
+    size_select: 6  #
+    select_strategy: random  # 
+  prior:
+    part1:
+      from_train
+    part2:
+      from_train
+  level:
+    part1:
+      name: uniform
+      min: 0.6
+      max: 1.
+    part2:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+
+data:
+  dataset:
+    root: ./data
+    assembly_path: test/assemblies/denovo_geom.csv
+    dbs:
+    - name: geom
+      lmdb_root: geom/lmdb
+      lmdb_path:
+        mols: mols.lmdb
+        torsion: torsion.lmdb
+        decom: decom.lmdb
+  split: val  # denovo task. use val set for test. just use the mol size info.
+
+task:
+  name: denovo
+  db: geom
+  datatask: design
+  transform:
+    name: ar

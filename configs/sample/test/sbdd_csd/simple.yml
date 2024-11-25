@@ -1,0 +1,50 @@
+
+sample:
+  seed: 2024
+  batch_size: 101
+  num_repeats: 100
+  save_traj_prob: 0.0
+
+transforms:
+  variable_mol_size:
+    name: variable_mol_size
+    num_atoms_distri:
+      strategy: pocket_atoms_based
+      mean:
+        coef: 0.05924407
+        bias: 0.1478300335619629
+      std:
+        coef: 0
+        bias: 6.303689641435993
+      min: 5
+
+noise:
+  name: sbdd
+  num_steps: 100
+  prior: from_train
+  level:
+    name: advance
+    min: 0.
+    max: 1.
+    step2level:
+      scale_start: 0.99999
+      scale_end: 0.00001
+      width: 3
+
+data:
+  dataset:
+    root: ./data
+    assembly_path: test/assemblies/lmdb/sbdd_csd.lmdb
+    dbs:
+    - name: csd
+      lmdb_root: csd/lmdb
+      lmdb_path:
+        pocmol10: pocmol10.lmdb
+        torsion: torsion.lmdb
+        decom: decom.lmdb
+
+task:
+  name: sbdd
+  db: csd
+  transform:
+    name: sbdd

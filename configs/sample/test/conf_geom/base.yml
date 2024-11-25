@@ -1,0 +1,40 @@
+
+sample:
+  seed: 2024
+  batch_size: 4000
+  num_repeats: 2
+  save_traj_prob: 0.0
+
+noise:
+  name: conf
+  num_steps: 100
+  prior: from_train
+  level:
+    name: advance
+    min: 0.
+    max: 1.
+    step2level:
+      scale_start: 0.99999
+      scale_end: 0.00001
+      width: 3
+
+data:
+  dataset:
+    root: ./data
+    # assembly_path: test/assemblies/lmdb/conf_geom.lmdb
+    assembly_path: test/assemblies/conf_geom.csv
+    dbs:
+    - name: geom
+      lmdb_root: geom/lmdb
+      lmdb_path:
+        mols: mols.lmdb
+        torsion: torsion.lmdb
+        decom: decom.lmdb
+
+task:
+  name: conf
+  db: geom
+  transform:
+    name: conf
+    settings:
+      free: 1.

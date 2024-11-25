@@ -1,0 +1,88 @@
+
+sample:
+  seed: 2024
+  batch_size: 500
+  num_repeats: 100
+  save_traj_prob: 0.02
+
+
+common:
+  node_prior_probs: &node_prior_probs [3, 2, 2, 2, 1, 1, 1, 0.3, 0.3, 0.3, 0.3, 13.2]
+
+noise:
+  name: fbdd
+  num_steps: 100
+  prior:
+    part1:
+      pos_only: True
+      pos: 
+        name: allpos
+        pos:
+          name: gaussian_simple
+          # sigma_func: 'sqrt'
+          sigma_max: 1
+        translation:
+          name: translation
+          ve: False
+          mean: 0
+          std: 1
+        rotation:
+          name: rotation
+          sigma_max: 0.0002
+        torsional:
+          name: torsional
+          sigma_max: 0.2
+    part2:
+      node: 
+        name: categorical
+        prior_type: predefined
+        prior_probs: *node_prior_probs
+      pos: 
+        name: allpos
+        pos:
+          name: gaussian_simple
+          sigma_max: 1
+      edge: 
+        name: categorical
+        prior_type: tomask_half
+  level:
+    part1:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+    part2:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+
+data:
+  dataset:
+    root: ./data
+    assembly_path: test/assemblies/growing_csd.csv
+    dbs:
+    - name: csd
+      lmdb_root: csd/lmdb
+      lmdb_path:
+        pocmol10: pocmol10.lmdb
+        torsion: torsion.lmdb
+        decom: decom.lmdb
+        growing: growing.lmdb
+
+task:
+  name: growing
+  db: csd
+  transform:
+    name: growing
+    settings:
+      part1_pert:
+        free: 1
+      known_anchor:
+        none: 1

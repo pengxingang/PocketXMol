@@ -1,0 +1,47 @@
+
+sample:
+  seed: 2023
+
+
+# the following should not be changed for getting belief
+
+
+noise:
+  name: dock
+  num_steps: 1
+  init_step: 0.01
+  prior:
+    pos: 
+      name: allpos
+      pos:
+        name: gaussian_simple
+        sigma_func: 'sqrt'
+        sigma_max: 1.0
+      translation:
+        name: translation
+        ve: False
+        mean: 0
+        std: 1
+      rotation:
+        name: rotation
+        sigma_max: 0.0002
+      torsional:
+        name: torsional
+        sigma_max: 0.2
+        decouple: False
+  level:
+    name: advance
+    min: 1.
+    max: 1.
+    step2level:
+      scale_start: 0.99999
+      scale_end: 0.00001
+      width: 3
+
+
+task:
+  name: dock
+  transform:
+    name: dock
+    settings:
+      flexible: 1
