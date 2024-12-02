@@ -1,0 +1,52 @@
+
+sample:
+  seed: 2024
+  batch_size: 50
+  num_mols: 100
+  save_traj_prob: 0.05
+
+
+data:
+  protein_path: data/examples/dock/8C7Y_TXV_protein.pdb
+  input_ligand: data/examples/dock/8C7Y_TXV_ligand_start_conf.sdf  # mol sdf file
+  # input_ligand: CC(C)(C#N)c1cccc(C(=O)Nc2ccc(F)c(C(=O)c3c[nH]c4ncc(Cl)cc34)c2F)c1  # can also be SMILES
+  is_pep: False
+  pocket_args:
+    pocket_coord: [-8.2570, 85.1810, 19.0500]  # for extracting pocket
+    radius: 15
+    # You can also use a reference ligand (smaller radius since mol is larger than a point)
+    # ref_ligand_path: data/examples/dock/8C7Y_TXV_ligand.sdf  # for extracting pocket
+    # radius: 10
+  pocmol_args:
+    data_id: dock_8C7Y_TXV
+    pdbid: 8C7Y
+
+
+transforms:
+  featurizer_pocket:
+    center: [-8.2570, 85.1810, 19.0500]  # space center for denosing
+
+
+#  The following defines docking task (flexible noise)
+
+task:
+  name: dock
+  transform:
+    name: dock
+    settings:
+      free: 0
+      flexible: 1
+
+
+noise:
+  name: dock
+  num_steps: 100
+  prior: from_train
+  level:
+    name: advance
+    min: 0.
+    max: 1.
+    step2level:
+      scale_start: 0.99999
+      scale_end: 0.00001
+      width: 3

@@ -22,8 +22,7 @@ from Bio import PDB
 
 
 from scripts.train_pl import DataModule
-from models.maskfill import AsymDiff, PMAsymDenoiser
-from models.bond_predictor import BondPredictor
+from models.maskfill import PMAsymDenoiser
 from models.sample import seperate_outputs2, sample_loop3
 from utils.transforms import *
 from utils.misc import *
@@ -178,10 +177,7 @@ if __name__ == '__main__':
 
     # # Model
     logger.info('Loading diffusion model...')
-    if train_config.model.name == 'asym_diff':
-        model = AsymDiff(
-            config=train_config.model, **in_dims).to(args.device)
-    elif train_config.model.name == 'pm_asym_denoiser':
+    if train_config.model.name == 'pm_asym_denoiser':
         model = PMAsymDenoiser(config=train_config.model, **in_dims).to(args.device)
     model.load_state_dict({k[6:]:value for k, value in ckpt['state_dict'].items() if k.startswith('model.')}) # prefix is 'model'
     model.eval()

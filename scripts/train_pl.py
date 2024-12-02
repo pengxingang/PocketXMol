@@ -23,7 +23,7 @@ torch.set_float32_matmul_precision('medium')
 # from torch.utils.data import get_worker_info
 
 sys.path.append('.')
-from models.maskfill import AsymDiff, PMAsymDenoiser
+from models.maskfill import PMAsymDenoiser
 from models.loss import get_loss_func
 from utils.dataset import ForeverTaskDataset
 from utils.transforms import FeaturizeMol, Compose, get_transforms, FeaturizePocket
@@ -137,11 +137,7 @@ class ModelLightning(pl.LightningModule):
         self.sync_dist = (self.num_gpus>1) or self.multi_node
 
         # Model
-        if self.config.model.name == 'asym_diff':
-            self.model = AsymDiff(config=self.config.model,
-                                  num_node_types=num_node_types,
-                                  num_edge_types=num_edge_types)
-        elif self.config.model.name == 'pm_asym_denoiser':
+        if self.config.model.name == 'pm_asym_denoiser':
             self.model = PMAsymDenoiser(config=self.config.model,
                                   num_node_types=num_node_types,
                                   num_edge_types=num_edge_types, **kwargs)

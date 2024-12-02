@@ -213,7 +213,7 @@ Configuration files include:
 - `unknown_connect.yml`: fragment linking with unknown connecting atoms of fragments
 
 
-## PROTAC linker design
+## PROTAC design
 Design PROTAC molecules by linking fragments for the 43 fragment pairs in the PROTAC-DB test set.
 ```python
 python scripts/sample_drug3d.py \
@@ -264,7 +264,9 @@ The task configuration file is `configs/sample/test/pepinv_pepbdb/base.yml`.
 
 # Sample for provided data
 Here, we demonstrate some examples of sampling using the provided data in the `data/examples` directory.
-For small-molecule tasks, run the following command:
+
+
+Run the following command:
 ```python
 python scripts/sample_use.py \
     --config_task configs/sample/examples/dockmol.yml \
@@ -272,23 +274,50 @@ python scripts/sample_use.py \
     --device cuda:0
 ```
 The configuration files are in `configs/sample/examples`, including:
-- `dockmol.yml`: dock a small molecule to a protein pocket
-- `dockmol_flex.yml`: dock a small molecule to a protein pocket using flexible noise
-- `sbdd.yml`: design drug-like molecules for protein pocket
-- `growing.yml`: grow a fragment to design molecules for protein pocket
-- `growing_fix_frag.yml`: grow a fragment to design molecules for protein pocket with fixed fragment pose
+- Docking
+    - `dock_smallmol.yml`: dock a small molecule to a protein pocket
+    - `dock_smallmol_flex.yml`: dock a small molecule to a protein pocket using flexible noise
+    - `dock_smallmol_84663.yml`: dock the molecule 84663 to caspase-9
+    - `dock_pep.yml`: dock a peptide to a protein pocket
+- Small molecule design
+    - `sbdd.yml`: design drug-like molecules for protein pocket
+    - `growing_unfixed_frag.yml`: fragment growing with unfixed fragment pose, i.e., design small molecules containing a specified fragment graph for protein pocket
+    - `growing_fixed_frag.yml`: fragment growing with fixed fragment pose, i.e., design small molecules containing a specified fragment with fixed pose for protein pocket
+- Peptide design
+    - `pepdesign.yml`: design peptides for protein pocket
 
-For peptide tasks, run the following command:
-```python
-python scripts/sample_use_pdb.py \
-    --config_task configs/sample/examples/dockpep.yml \
-    --outdir outputs_examples \
-    --device cuda:0
-```
-The configuration files are in `configs/examples`, including:
-- `dockpep.yml`: dock a peptide to a protein pocket
-- `pepdesign.yml`: design peptides for protein pocket
+More examples are on the way.
 
+#### Configuration explanation
+
+You can refer to these configuration files to adapt to your own data and tasks. Here are some simple explanation of the configuration.
+
+Typically there are five main blocks: `sample`, `data`, `transforms`, `task`, and `noise`. The first three keys define the data and sampling parameters, while the last two define the task. In most cases, you only need to find a task template configuration file and modify the first three blocks.
+
+- `sample`: the sampling parameters, including base random seed, batch size, and the number of generated molecules. The parameter `save_traj_prob` means the frequency of saving the generation trajectories.
+- `data`: the input data, including
+    - `protein_path`: the path to the protein PDB file.
+    - `input_ligand`: the information of input ligand.
+        - For small molecule, it can be a SDF file path, the SMILES string or `None` (for *de novo* small mol design).
+        - For peptide, it can be the PDB file path, the sequence string (with prefix `pep_seq_`, e.g., pepseq_DTVFALFW, for docking) or the sequence length (with prefix `peplen_`, e.g., peplen_10, for *de novo* design).
+    - `is_pep`: bool, whether the ligand is peptide. It is used to create the PDB files for the generated molecules. If not set, it will be automatically determined according to `input_ligand`.
+    - `pocket_args`: dict of pocket parameters, including
+        - `ref_ligand_path`: path to the reference molecule file (SDF or PDB). This molecule is used to determine the pocket from the complete protein. Exclusive to `pocket_coord`.
+        - `pocket_coord`: the coordinate of the pocket. The pocket will be defined as the residues near the coordinate. Exclusive to `ref_ligand_path`. If neither `ref_ligand_path` nor `pocket_coord` is set, it will use `input_ligand` as reference.
+        - `radius`: the residues within the radius to the reference ligand or the pocket coordinate are defined as pocket residues. Default is 10.
+        - `criterion`: the criterion to define the residue distance, be one of ['center_of_mass', 'min']. Default is 'center_of_mass'.
+    - `pocmol_args`: user-defined identifiers. Not important.
+        - `data_id`
+        - `pdbid`
+- `transforms`
+    - `featurizer_pocket`:
+        - `center`: coordinate space center for denoising. It influences sampling atom coordinates from the Gaussian noise at the first step. If not set, it will be automatically defined as the average of pocket atom coordinates. (You can also use `featurizer/mol_as_pocket_center` to specify the pocket center)
+    - `featurizer`
+        - `mol_as_pocket_center`: bool, use the center coordinates of the ligand as the space center. But the parameter `data/pocket_args/input_ligand` should be SDF/PDB file in this case. (You can also use `featurizer_pocket/center` to specify the pocket center)
+    - `variable_mol_size`: distributions of the number of atoms for small-molecule designing tasks.
+    - `variable_sc_size`: distributions of number of side-chain atoms for peptide designing. The default value should work well.
+- `task`: the task and its specific mode.
+- `noise`: the task nosie parameters.
 
 
 # Train

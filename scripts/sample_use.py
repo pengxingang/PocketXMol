@@ -1,7 +1,4 @@
-from copy import deepcopy
 import os
-
-# os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 import sys
 sys.path.append('.')
 import shutil
@@ -11,43 +8,83 @@ import torch
 import torch.utils.tensorboard
 import numpy as np
 from itertools import cycle
-# from torch_geometric.data import Batch
 from easydict import EasyDict
 from tqdm.auto import tqdm
 from rdkit import Chem
 from torch_geometric.loader import DataLoader
-from collections import OrderedDict
+from Bio.SeqUtils import seq1
+from Bio import PDB
+
 
 from scripts.train_pl import DataModule
-from models.maskfill import AsymDiff, PMAsymDenoiser
-from models.bond_predictor import BondPredictor
+from models.maskfill import PMAsymDenoiser
 from models.sample import seperate_outputs2, sample_loop3, get_cfd_traj
 from utils.transforms import *
 from utils.misc import *
 from utils.reconstruct import *
 from utils.dataset import UseDataset
 from utils.sample_noise import get_sample_noiser
-from process.utils_process import process_raw
+from process.utils_process import extract_pocket, add_pep_bb_data, get_peptide_info, get_input_from_file,\
+    make_dummy_mol_with_coordinate
 
-def print_pool_status(pool, logger):
-    logger.info('[Pool] Succ/Incomp/Bad: %d/%d/%d' % (
-        len(pool.succ), len(pool.incomp), len(pool.bad)
-    ))
 
-is_vscode = False
-if os.environ.get("TERM_PROGRAM") == "vscode":
-    is_vscode = True
+def print_pool_status(pool, logger, is_pep=False):
+    if not is_pep:
+        logger.info('[Pool] Succ/Incomp/Bad: %d/%d/%d' % (
+            len(pool.succ), len(pool.incomp), len(pool.bad)
+        ))
+    else:
+        logger.info('[Pool] Succ/Nonstd/Incomp/Bad: %d/%d/%d/%d' % (
+            len(pool.succ), len(pool.nonstd), len(pool.incomp), len(pool.bad)
+        ))
+
+
+def get_input_data(protein_path,
+                   input_ligand=None,
+                   is_pep=False,
+                   pocket_args={},
+                   pocmol_args={}):
+
+
+    # # get pocket
+    ref_ligand = pocket_args.get('ref_ligand_path', None)
+    pocket_coord = pocket_args.get('pocket_coord', None)
+    if ref_ligand is not None:
+        pass  # use ref_ligand_path to define pocket
+    elif pocket_coord is not None:
+        ref_ligand = make_dummy_mol_with_coordinate(pocket_coord)
+    else: # use input_ligand paths
+        print('Neither ref_ligand nor pocket_coord is provided for pocket extraction. Use input_ligand as reference.')
+        assert input_ligand is not None and input_ligand.endswith('.sdf'), 'Only sdf input_ligand can be used for pocket extraction.'
+        ref_ligand = input_ligand
+    pocket_pdb = extract_pocket(protein_path, ref_ligand, 
+                            radius=pocket_args.get('radius', 10),
+                            criterion=pocket_args.get('criterion', 'center_of_mass'))
+    #process the input ligand and protein pocket
+    pocmol_data, mol = get_input_from_file(input_ligand, pocket_pdb, return_mol=True, **pocmol_args)
+    
+    # add peptide info
+    if is_pep: # pep tasks
+        if input_ligand.endswith('.pdb'):  # pep docking given pdb file
+            pep_info = get_peptide_info(input_ligand)
+            # in case both sdf and pdb are provided, check consistency. (Might not exist in practice?)
+            assert torch.isclose(pocmol_data['pos_all_confs'][0], pep_info['peptide_pos'], 1e-2).all(), 'mol and pep atoms may not match'
+        elif input_ligand.startswith('peplen_'):  # pepdesign
+            pep_info = add_pep_bb_data(pocmol_data)
+        else:  # pepseq_{xxx}. dock pep: no need to extract any pep info
+            pep_info = {}
+        pocmol_data.update(pep_info)
+    return pocmol_data, pocket_pdb, mol
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--config_task', type=str, default='configs/sample/examples/sbdd_base.yml', help='task config')
-    # parser.add_argument('--config_task', type=str, default='configs/sample/examples/dockmol.yml', help='task config')
-    # parser.add_argument('--config_task', type=str, default='configs/sample/examples/growing_base_fix_frag.yml', help='task config')
-    parser.add_argument('--config_task', type=str, default='configs/sample/examples/dockmol_flex.yml', help='task config')
+    parser.add_argument('--config_task', type=str, default='configs/sample/examples/growing_unfixed_frag.yml', help='task config')
     parser.add_argument('--config_model', type=str, default='configs/sample/pxm.yml', help='model config')
     parser.add_argument('--outdir', type=str, default='./outputs_use')
-    parser.add_argument('--device', type=str, default='cuda:0')
-    parser.add_argument('--batch_size', type=int, default=0)
+    parser.add_argument('--device', type=str, default='cuda:1')
+    parser.add_argument('--batch_size', type=int, default=0, help='batch size; by default use the value in the config file')
     parser.add_argument('--shuffle', type=bool, default=False)
     args = parser.parse_args()
 
@@ -69,24 +106,11 @@ if __name__ == '__main__':
 
     save_traj_prob = config.sample.save_traj_prob
     batch_size = config.sample.batch_size if args.batch_size == 0 else args.batch_size
-    num_mols = getattr(config.sample, 'num_mols', int(1e10))
-    num_repeats = getattr(config.sample, 'num_repeats', 1)
+    num_mols = config.sample.get('num_mols', 100)
+    num_repeats = config.sample.get('num_repeats', 1)
+
     # # Logging
-    if is_vscode:
-        dir_names= os.path.dirname(args.config_task).split('/')
-        is_sample = dir_names.index('configs')
-        names = dir_names[is_sample+1:]
-        log_root = '/'.join(
-            [args.outdir.replace('outputs', 'outputs_vscode')] + names
-        )
-        save_traj_prob = 1.0
-        batch_size = 101
-        num_mols = 100
-        num_repeats = 1
-    else:
-        num_mols = config.sample.num_mols
-        num_repeats = config.sample.num_repeats
-        log_root = args.outdir
+    log_root = args.outdir
     log_dir = get_new_log_dir(log_root, prefix=config_name)
     logger = get_logger('sample', log_dir)
     writer = torch.utils.tensorboard.SummaryWriter(log_dir)
@@ -114,12 +138,15 @@ if __name__ == '__main__':
     featurizer = featurizer_list[-1]  # for mol decoding
     in_dims = dm.get_in_dims()
     task_trans = get_transforms(config.task.transform, mode='use')
-    is_ar = config.task.transform.name
+    is_ar = config.task.transform.get('name', '')
     noiser = get_sample_noiser(config.noise, in_dims['num_node_types'], in_dims['num_edge_types'],
                                mode='sample',device=args.device, ref_config=train_config.noise)
-    if 'variable_mol_size' in getattr(config, 'transforms', []):
+    if 'variable_mol_size' in getattr(config, 'transforms', []):  # mol design
         transforms = featurizer_list + [
             get_transforms(config.transforms.variable_mol_size), task_trans]
+    elif 'variable_sc_size' in getattr(config, 'transforms', []):  # pep design
+        transforms = featurizer_list + [
+            get_transforms(config.transforms.variable_sc_size), task_trans]
     else:
         transforms = featurizer_list + [task_trans]
     addition_transforms = [get_transforms(tr) for tr in config.data.get('transforms', [])]
@@ -130,28 +157,32 @@ if __name__ == '__main__':
     # # Data loader
     logger.info('Loading dataset...')
     data_cfg = config.data
-    data, pocket_block = process_raw(
-                       protein_path=data_cfg.protein_path,
-                       mol_path=data_cfg.get('mol_path', None),
-                       modes=['extract_pocket', 'pocmol', 'torsional'],
-                       return_pocket=True, save_pocket=False,
-                       **data_cfg.get('args', {}))
+    is_pep = data_cfg.get('is_pep', None)
+    if is_pep is None:
+        is_pep = data_cfg.input_ligand.endswith('.pdb') or data_cfg.input_ligand.startswith('pep')
+    data, pocket_block, in_mol = get_input_data(
+        protein_path=data_cfg.protein_path,
+        input_ligand=data_cfg.get('input_ligand', None),
+        is_pep=is_pep,
+        pocket_args=data_cfg.get('pocket_args', {}),
+        pocmol_args=data_cfg.get('pocmol_args', {})
+    )
     test_set = UseDataset(data, n=num_mols, task=config.task.name, transforms=transforms)
 
     test_loader = DataLoader(test_set, batch_size, shuffle=args.shuffle,
                             num_workers = train_config.train.num_workers,
                             pin_memory = train_config.train.pin_memory,
                             follow_batch=follow_batch, exclude_keys=exclude_keys)
-    # save pocket
-    with open(os.path.join(pure_sdf_dir, '0_pocket_block.pdb'), 'w') as f:
+    # save pocket and mol
+    input_pocmol_dir = os.path.join(pure_sdf_dir, '0_inputs')
+    os.makedirs(input_pocmol_dir, exist_ok=True)
+    with open(os.path.join(input_pocmol_dir, 'pocket_block.pdb'), 'w') as f:
         f.write(pocket_block)
+    Chem.MolToMolFile(in_mol, os.path.join(input_pocmol_dir, 'input_mol.sdf'))
 
     # # Model
     logger.info('Loading diffusion model...')
-    if train_config.model.name == 'asym_diff':
-        model = AsymDiff(
-            config=train_config.model, **in_dims).to(args.device)
-    elif train_config.model.name == 'pm_asym_denoiser':
+    if train_config.model.name == 'pm_asym_denoiser':
         model = PMAsymDenoiser(config=train_config.model, **in_dims).to(args.device)
     model.load_state_dict({k[6:]:value for k, value in ckpt['state_dict'].items() if k.startswith('model.')}) # prefix is 'model'
     model.eval()
@@ -160,148 +191,186 @@ if __name__ == '__main__':
         'succ': [],
         'bad': [],
         'incomp': [],
+        **({'nonstd': []} if is_pep else {})
     })
     info_keys = ['data_id', 'db', 'task', 'key']
     i_saved = 0
     # generating molecules
-    # init_step = config.noise
-    logger.info('Start sampling... (n_repeats=%d, n_mols=%d)' % (num_repeats, num_mols))
-    for i_repeat in range(num_repeats):
-        logger.info(f'Generating molecules. Testset repeat {i_repeat}.')
-        for batch in test_loader:
-            if i_saved >= num_mols:
-                logger.info('Enough molecules. Stop sampling.')
-                break
-            
-            # # prepare batch then sample
-            batch = batch.to(args.device)
-            # outputs, trajs = sample_loop2(batch, model, noiser, args.device)
-            batch, outputs, trajs = sample_loop3(batch, model, noiser, args.device, is_ar=is_ar)
-            
-            # # decode outputs to molecules
-            data_list = [{key:batch[key][i] for key in info_keys} for i in range(len(batch))]
-            # try:
-            generated_list, outputs_list, traj_list_dict = seperate_outputs2(batch, outputs, trajs)
-            # except:
-            #     continue
-            
-            # # post process generated data for the batch
-            mol_info_list = []
-            for i_mol in tqdm(range(len(generated_list)), desc='Post process generated mols'):
-                # add meta data info
-                mol_info = featurizer.decode_output(**generated_list[i_mol]) 
-                mol_info.update(data_list[i_mol])  # add data info
+    logger.info('Start sampling... (Total: n_mols=%d)' % (num_mols))
+    
+    try:
+        for i_repeat in range(num_repeats):
+            logger.info(f'Generating molecules.')
+            for batch in test_loader:
+                if i_saved >= num_mols:
+                    logger.info('Enough molecules. Stop sampling.')
+                    break
                 
-                # reconstruct mols
-                try:
-                    rdmol = reconstruct_from_generated_with_edges(mol_info)
-                    smiles = Chem.MolToSmiles(rdmol)
-                    if '.' in smiles:
-                        tag = 'incomp'
-                        pool.incomp.append(mol_info)
-                        logger.warning('Incomplete molecule: %s' % smiles)
+                # # prepare batch then sample
+                batch = batch.to(args.device)
+                batch, outputs, trajs = sample_loop3(batch, model, noiser, args.device, is_ar=is_ar)
+                
+                # # decode outputs to molecules
+                data_list = [{key:batch[key][i] for key in info_keys} for i in range(len(batch))]
+                generated_list, outputs_list, traj_list_dict = seperate_outputs2(batch, outputs, trajs)
+                
+                # # post process generated data for the batch
+                mol_info_list = []
+                for i_mol in tqdm(range(len(generated_list)), desc='Post process generated mols'):
+                    # add meta data info
+                    mol_info = featurizer.decode_output(**generated_list[i_mol]) 
+                    mol_info.update(data_list[i_mol])  # add data info
+                    
+                    # reconstruct mols
+                    try:
+                        if not is_pep:
+                            with CaptureLogger():
+                                rdmol = reconstruct_from_generated_with_edges(mol_info, in_mol=in_mol)
+                            smiles = Chem.MolToSmiles(rdmol)
+                            if '.' in smiles:
+                                tag = 'incomp'
+                                pool.incomp.append(mol_info)
+                                logger.warning('Incomplete molecule: %s' % smiles)
+                            else:
+                                tag = ''
+                                pool.succ.append(mol_info)
+                                logger.info('Success: %s' % smiles)
+                        else:
+                            with CaptureLogger():
+                                pdb_struc, rdmol = reconstruct_pdb_from_generated(mol_info, gt_path=data_cfg.input_ligand)
+                            aaseq = seq1(''.join(res.resname for res in pdb_struc.get_residues()))
+                            if rdmol is None:
+                                rdmol = Chem.MolFromSmiles('')
+                            smiles = Chem.MolToSmiles(rdmol)
+                            if '.' in smiles:
+                                tag = 'incomp'
+                                pool.incomp.append(mol_info)
+                                logger.warning('Incomplete molecule: %s' % aaseq)
+                            elif 'X' in aaseq:
+                                tag = 'nonstd'
+                                pool.nonstd.append(mol_info)
+                                logger.warning('Non-standard amino acid: %s' % aaseq)
+                            else:  # nb
+                                tag = ''
+                                pool.succ.append(mol_info)
+                                logger.info('Success: %s' % aaseq)
+                    except MolReconsError:
+                        pool.bad.append(mol_info)
+                        logger.warning('Reconstruction error encountered.')
+                        smiles = ''
+                        tag = 'bad'
+                        rdmol = create_sdf_string(mol_info)
+                        if is_pep:
+                            aaseq = ''
+                            pdb_struc = PDB.Structure.Structure('bad')
+                    
+                    mol_info.update({
+                        'rdmol': rdmol,
+                        'smiles': smiles,
+                        'tag': tag,
+                        'output': outputs_list[i_mol],
+                        **({
+                            'pdb_struc': pdb_struc,
+                            'aaseq': aaseq,
+                        } if is_pep else {})
+                    })
+                    
+                    # get traj
+                    p_save_traj = np.random.rand()  # save traj
+                    if p_save_traj <  save_traj_prob:
+                        mol_traj = {}
+                        for traj_who in traj_list_dict.keys():
+                            traj_this_mol = traj_list_dict[traj_who][i_mol]
+                            for t in range(len(traj_this_mol['node'])):
+                                mol_this = featurizer.decode_output(
+                                        node=traj_this_mol['node'][t],
+                                        pos=traj_this_mol['pos'][t],
+                                        halfedge=traj_this_mol['halfedge'][t],
+                                        halfedge_index=generated_list[i_mol]['halfedge_index'],
+                                        pocket_center=generated_list[i_mol]['pocket_center'],
+                                    )
+                                mol_this = create_sdf_string(mol_this)
+                                mol_traj.setdefault(traj_who, []).append(mol_this)
+                                
+                        mol_info['traj'] = mol_traj
+                    mol_info_list.append(mol_info)
+
+                # # save sdf/pdb mols for the batch
+                df_info_list = []
+                for data_finished in mol_info_list:
+                    # # save generated mol/pdb
+                    rdmol = data_finished['rdmol']
+                    tag = data_finished['tag']
+                    filename_base = str(i_saved) + (f'-{tag}' if tag else '')
+                    # save pdb
+                    if is_pep:
+                        pdb_struc = data_finished['pdb_struc']
+                        filename_pdb = filename_base + '.pdb'
+                        pdb_io = PDBIO()
+                        pdb_io.set_structure(pdb_struc)
+                        pdb_io.save(os.path.join(pure_sdf_dir, filename_pdb))
+                    # rdmol to sdf
+                    filename_sdf = filename_base + ('.sdf' if not is_pep else '_mol.sdf')
+                    if tag != 'bad':
+                        Chem.MolToMolFile(rdmol, os.path.join(pure_sdf_dir, filename_sdf))
                     else:
-                        tag = ''
-                        pool.succ.append(mol_info)
-                        logger.info('Success: %s' % smiles)
-                except MolReconsError:
-                    pool.bad.append(mol_info)
-                    logger.warning('Reconstruction error encountered.')
-                    smiles = ''
-                    tag = 'bad'
-                    rdmol = create_sdf_string(mol_info)
-                
-                mol_info.update({
-                    'rdmol': rdmol,
-                    'smiles': smiles,
-                    'tag': tag,
-                    'output': outputs_list[i_mol],
-                })
-                
-                # get traj
-                p_save_traj = np.random.rand()  # save traj
-                if p_save_traj <  save_traj_prob:
-                    mol_traj = {}
-                    for traj_who in traj_list_dict.keys():
-                        traj_this_mol = traj_list_dict[traj_who][i_mol]
-                        for t in range(len(traj_this_mol['node'])):
-                            mol_this = featurizer.decode_output(
-                                    node=traj_this_mol['node'][t],
-                                    pos=traj_this_mol['pos'][t],
-                                    halfedge=traj_this_mol['halfedge'][t],
-                                    halfedge_index=generated_list[i_mol]['halfedge_index'],
-                                    pocket_center=generated_list[i_mol]['pocket_center'],
-                                )
-                            mol_this = create_sdf_string(mol_this)
-                            mol_traj.setdefault(traj_who, []).append(mol_this)
-                            
-                    mol_info['traj'] = mol_traj
-                mol_info_list.append(mol_info)
+                        with open(os.path.join(pure_sdf_dir, filename_sdf), 'w+') as f:
+                            f.write(rdmol)
+                    # save traj
+                    if 'traj' in data_finished:
+                        for traj_who in data_finished['traj'].keys():
+                            sdf_file = '$$$$\n'.join(data_finished['traj'][traj_who])
+                            name_traj = filename_base + f'-{traj_who}.sdf'
+                            with open(os.path.join(sdf_dir, name_traj), 'w+') as f:
+                                f.write(sdf_file)
+                    i_saved += 1
+                    # save output
+                    output = data_finished['output']
+                    cfd_traj = get_cfd_traj(output['confidence_pos_traj'])  # get cfd
+                    cfd_pos = output['confidence_pos'].detach().cpu().numpy().mean()
+                    cfd_node = output['confidence_node'].detach().cpu().numpy().mean()
+                    cfd_edge = output['confidence_halfedge'].detach().cpu().numpy().mean()
+                    save_output = getattr(config.sample, 'save_output', [])
+                    if len(save_output) > 0:
+                        output = {key: output[key] for key in save_output}
+                        torch.save(output, os.path.join(sdf_dir, filename_base + '.pt'))
 
-            # # save sdf mols for the batch
-            df_info_list = []
-            for data_finished in mol_info_list:
-                # save mol
-                rdmol = data_finished['rdmol']
-                tag = data_finished['tag']
-                filename = str(i_saved) + (f'-{tag}' if tag else '') + '.sdf'
-                if tag != 'bad':
-                    Chem.MolToMolFile(rdmol, os.path.join(pure_sdf_dir, filename))
-                else:
-                    with open(os.path.join(pure_sdf_dir, filename), 'w+') as f:
-                        f.write(rdmol)
-                # save traj
-                if 'traj' in data_finished:
-                    for traj_who in data_finished['traj'].keys():
-                        sdf_file = '$$$$\n'.join(data_finished['traj'][traj_who])
-                        name_traj = filename.replace('.sdf', f'-{traj_who}.sdf')
-                        with open(os.path.join(sdf_dir, name_traj), 'w+') as f:
-                            f.write(sdf_file)
-                i_saved += 1
-                # save output
-                output = data_finished['output']
-                cfd_traj = get_cfd_traj(output['confidence_pos_traj'])  # get cfd
-                cfd_pos = output['confidence_pos'].detach().cpu().numpy().mean()
-                cfd_node = output['confidence_node'].detach().cpu().numpy().mean()
-                cfd_edge = output['confidence_halfedge'].detach().cpu().numpy().mean()
-                save_output = getattr(config.sample, 'save_output', [])
-                if len(save_output) > 0:
-                    output = {key: output[key] for key in save_output}
-                    torch.save(output, os.path.join(sdf_dir, filename.replace('.sdf', '.pt')))
+                    # log info 
+                    info_dict = {
+                        key: data_finished[key] for key in info_keys +
+                        (['aaseq'] if is_pep else []) + ['smiles', 'tag']
+                    }
+                    info_dict.update({
+                        'filename': filename_sdf if not is_pep else filename_pdb,
+                        'i_repeat': i_repeat,
+                        'cfd_traj': cfd_traj,
+                        'cfd_pos': cfd_pos,
+                        'cfd_node': cfd_node,
+                        'cfd_edge': cfd_edge,
+                    })
 
-                # log info 
-                info_dict = {
-                    key: data_finished[key] for key in info_keys + ['smiles', 'tag']
-                }
-                info_dict.update({
-                    'filename': filename,
-                    'i_repeat': i_repeat,
-                    'cfd_traj': cfd_traj,
-                    'cfd_pos': cfd_pos,
-                    'cfd_node': cfd_node,
-                    'cfd_edge': cfd_edge,
-                })
-
-                df_info_list.append(info_dict)
-        
-            df_info_batch = pd.DataFrame(df_info_list)
-            # save df
-            if os.path.exists(df_path):
-                df_info = pd.read_csv(df_path)
-                df_info = pd.concat([df_info, df_info_batch], ignore_index=True)
-            else:
-                df_info = df_info_batch
-            df_info.to_csv(df_path, index=False)
-            print_pool_status(pool, logger)
+                    df_info_list.append(info_dict)
             
-            # clean up
-            del batch, outputs, trajs, mol_info_list[0:len(mol_info_list)]
-            with torch.cuda.device(args.device):
-                torch.cuda.empty_cache()
-            gc.collect()
+                df_info_batch = pd.DataFrame(df_info_list)
+                # save df
+                if os.path.exists(df_path):
+                    df_info = pd.read_csv(df_path)
+                    df_info = pd.concat([df_info, df_info_batch], ignore_index=True)
+                else:
+                    df_info = df_info_batch
+                df_info.to_csv(df_path, index=False)
+                print_pool_status(pool, logger, is_pep=is_pep)
+                
+                # clean up
+                del batch, outputs, trajs, mol_info_list[0:len(mol_info_list)]
+                with torch.cuda.device(args.device):
+                    torch.cuda.empty_cache()
+                gc.collect()
 
 
-    # make dummy pool  (save disk space)
-    dummy_pool = {key: ['']*len(value) for key, value in pool.items()}
-    torch.save(dummy_pool, os.path.join(log_dir, 'samples_all.pt'))
-    # torch.save(pool, os.path.join(log_dir, 'samples_all.pt'))
+        # make dummy pool  (save disk space)
+        dummy_pool = {key: ['']*len(value) for key, value in pool.items()}
+        torch.save(dummy_pool, os.path.join(log_dir, 'samples_all.pt'))
+    except KeyboardInterrupt:
+        logger.info('KeyboardInterrupt. Stop sampling.')
+

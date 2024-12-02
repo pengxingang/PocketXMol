@@ -87,7 +87,7 @@ def reconstruct_pdb_from_generated(mol_info, check_atom=True, gt_path=''):
     
     tmpfile = tempfile.NamedTemporaryFile(suffix='.pdb')
     obConversion.WriteFile(obmol, tmpfile.name)
-    parser = PDBParser(PERMISSIVE=True,)
+    parser = PDBParser(PERMISSIVE=True, QUIET=True)
     pdb_struc = parser.get_structure('tmp', tmpfile.name)
     
     pdb_struc = sort_residues(pdb_struc)
@@ -310,7 +310,7 @@ def create_sdf_string(mol_info):
     n_bonds = len(bond_type)
     
     header = '\n Created by Python create_sdf_string function\n\n'
-    counts_line = f' {n_atoms:2} {n_bonds:2}  0  0  0  0  0  0  0  0999 V2000\n'
+    counts_line = f'{n_atoms:3}{n_bonds:3}  0  0  0  0  0  0  0  0999 V2000\n'
     atoms_block = ""
     for i, (x, y, z) in enumerate(xyz):
         atoms_block += f'{x:10.4f}{y:10.4f}{z:10.4f} {elements[i]:2}  ' + '  '.join(['0']*12) + '\n'
@@ -321,10 +321,13 @@ def create_sdf_string(mol_info):
     return sdf_string
 
 
-def reconstruct_pos(mol_info):
+def reconstruct_pos(mol_info, in_mol=None):
     # data_id = mol_info['data_id']
     # db = mol_info['db']
-    mol = get_mol_from_data(mol_info, root_dir='data')
+    if in_mol is None:
+        mol = get_mol_from_data(mol_info, root_dir='data')
+    else:
+        mol = deepcopy(in_mol)
     pos = mol_info['atom_pos'].tolist()
     assert mol.GetNumAtoms() == len(pos), 'num atoms do not match gen pos'
     conf = mol.GetConformer(0)
@@ -334,12 +337,11 @@ def reconstruct_pos(mol_info):
     return mol
 
 
-def reconstruct_from_generated_with_edges(mol_info, check_validity=True, add_edge=None):
-
+def reconstruct_from_generated_with_edges(mol_info, check_validity=True, add_edge=None, in_mol=None):
     # for conf or dock
     if mol_info['task'] in ['conf', 'dock']:
         try:
-            return reconstruct_pos(mol_info)
+            return reconstruct_pos(mol_info, in_mol)
         except Exception as e:
             print('Failed to use reconstruct_pos:', e)
             pass
@@ -352,8 +354,8 @@ def reconstruct_from_generated_with_edges(mol_info, check_validity=True, add_edg
                 return reconstruct_from_generated(mol_info)
             except:
                 raise MolReconsError()
-        elif add_edge == 'edm':
-            bond_index, bond_type = predict_bonds(atomic_nums, np.array(xyz))
+        # elif add_edge == 'edm':
+        #     bond_index, bond_type = predict_bonds(atomic_nums, np.array(xyz))
         else:
             raise ValueError('add_edge must be openbabel or edm')
     else:

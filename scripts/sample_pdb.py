@@ -1,6 +1,5 @@
-from copy import deepcopy
-import os
 
+import os
 import sys
 sys.path.append('.')
 import shutil
@@ -9,24 +8,19 @@ import gc
 import torch
 import torch.utils.tensorboard
 import numpy as np
-from itertools import cycle
-# from torch_geometric.data import Batch
 from easydict import EasyDict
 from tqdm.auto import tqdm
 from rdkit import Chem
 from torch_geometric.loader import DataLoader
-from collections import OrderedDict
 from Bio.SeqUtils import seq1
 from Bio import PDB
 
 from scripts.train_pl import DataModule
-from models.maskfill import AsymDiff, PMAsymDenoiser
-from models.bond_predictor import BondPredictor
+from models.maskfill import PMAsymDenoiser
 from models.sample import seperate_outputs2, sample_loop3, get_cfd_traj
 from utils.transforms import *
 from utils.misc import *
 from utils.reconstruct import *
-# from utils.chem import *
 from utils.sample_noise import get_sample_noiser
 
 def print_pool_status(pool, logger):
@@ -150,10 +144,7 @@ if __name__ == '__main__':
 
     # # Model
     logger.info('Loading diffusion model...')
-    if train_config.model.name == 'asym_diff':
-        model = AsymDiff(
-            config=train_config.model, **in_dims).to(args.device)
-    elif train_config.model.name == 'pm_asym_denoiser':
+    if train_config.model.name == 'pm_asym_denoiser':
         model = PMAsymDenoiser(config=train_config.model, **in_dims).to(args.device)
     model.load_state_dict({k[6:]:value for k, value in ckpt['state_dict'].items() if k.startswith('model.')}) # prefix is 'model'
     model.eval()

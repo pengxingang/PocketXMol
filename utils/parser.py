@@ -498,7 +498,7 @@ def parse_pdb_peptide(pdb_path):
     
     pep_feature_dict = {'pos': [], 'atom_name': [], 'is_backbone': [], 'res_id': [], 'atom_to_aa_type': []}
     for atom in structure.get_atoms():
-        element = atom.element
+        element = atom.element #TODO: may contain Hs; remove
         element = element if len(element) == 1 else element[0] + element[1].lower()
         pep_feature_dict['pos'].append(atom.get_coord())
         pep_feature_dict['atom_name'].append(atom.get_name())

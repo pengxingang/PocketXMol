@@ -1,0 +1,43 @@
+
+sample:
+  seed: 2024
+  batch_size: 50
+  num_mols: 100
+  save_traj_prob: 0.05
+
+
+data:
+  protein_path: data/examples/dock/casp9_align_rec.pdb
+  input_ligand: CC1(C)CCN(C(=O)c2c(O)c(-c3ccc(O)c(O)c3O)c(F)c(F)c2F)C1
+  is_pep: False
+  pocket_args:
+    # ref_ligand_path: data/examples/dock/casp9_pocket_coord.sdf  # for extracting pocket
+    pocket_coord: [-10.2124, 36.3612, 40.0386]
+    radius: 20
+  pocmol_args:
+    data_id: dock_casp9_84663
+    pdbid: 2ar9_B
+
+
+#  The following defines docking task (Gaussian noise)
+
+task:
+  name: dock
+  transform:
+    name: dock
+    settings:
+      free: 1
+      flexible: 0
+
+noise:
+  name: dock
+  num_steps: 100
+  prior: from_train
+  level:
+    name: advance
+    min: 0.
+    max: 1.
+    step2level:
+      scale_start: 0.99999
+      scale_end: 0.00001
+      width: 3

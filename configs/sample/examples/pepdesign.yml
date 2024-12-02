@@ -1,12 +1,25 @@
 
 sample:
-  seed: 2023
-  batch_size: 20
+  seed: 2024
+  batch_size: 50
   num_mols: 100
-  num_repeats: 1
-  save_traj_prob: 0.0
+  save_traj_prob: 0.02
+
+
+data:
+  protein_path: data/examples/peptide/3bik_A.pdb
+  input_ligand: peplen_10  # define peptide lengths
+  is_pep: True
+  pocket_args:
+    ref_ligand_path: data/examples/peptide/3bik_A_pocket_coord.sdf
+    radius: 20
+  pocmol_args:
+    data_id: pepdesign_3bik
+    pdbid: 3bik
+
+
 transforms:
-  variable_sc_size:
+  variable_sc_size:  # distributions of number of side-chain atoms
     name: variable_sc_size
     applicable_tasks: ['pepdesign']
     num_atoms_distri:
@@ -15,7 +28,20 @@ transforms:
         coef: 0.3817
         bias: 1.8727
   featurizer_pocket:
-    center: [7.9130, -7.3910, -25.9240]
+    center: [7.9130, -7.3910, -25.9240]  # space center for denosing
+
+
+#  The following defines the peptide design task
+
+task:
+  name: pepdesign
+  transform:
+    name: pepdesign
+    settings:
+      mode:
+        full: 1
+        sc: 0
+        packing: 0
 
 
 noise:
@@ -41,24 +67,3 @@ noise:
         scale_start: 0.99999
         scale_end: 0.00001
         width: 3
-
-data:
-  protein_path: data/examples/peptide/3bik_A.pdb
-  ref_ligand_path: data/examples/peptide/pocket_center.sdf
-  input_ligand: '10_peptide'
-  pocket_args: 
-    radius: 20
-  pocmol_args:
-    data_id: 3bik_pepdesign
-    pdbid: 3bik
-
-task:
-  name: pepdesign
-  transform:
-    name: pepdesign
-    settings:
-      mode:
-        full: 1
-        sc: 0
-        packing: 0
-

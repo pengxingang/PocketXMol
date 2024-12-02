@@ -80,7 +80,7 @@ def sample_loop3(batch, model, noiser, device=None, is_ar='', off_tqdm=False):
     
     step_ar = 0
     while True:
-        for step in tqdm(noiser.steps_loop(add_last=False), desc='Sampling', total=noiser.num_steps, disable=off_tqdm):
+        for step in tqdm(noiser.steps_loop(add_last=False), desc='Sampling steps', total=noiser.num_steps, disable=off_tqdm):
             with torch.no_grad():
                 # # add noise as the input of the step
                 batch = noiser(batch, step)

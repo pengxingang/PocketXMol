@@ -1,0 +1,3 @@
+
+model:
+  checkpoint: data/trained_models/pxm_use/checkpoints/pocketxmol.ckpt

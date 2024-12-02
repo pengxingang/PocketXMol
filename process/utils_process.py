@@ -140,10 +140,11 @@ def add_pep_bb_data(data):
 
 def get_make_mol_from_smiles(smiles, add_3D=True, center=None):
     mol = Chem.MolFromSmiles(smiles)
-    if add_3D:
+    if add_3D: # add 3D conformer
         mol = Chem.AddHs(mol)
-        AllChem.EmbedMolecule(mol)
-        # add 3D conformer
+        confid = AllChem.EmbedMolecule(mol, maxAttempts=5000)
+        if confid != 0:
+            AllChem.EmbedMolecule(mol, useRandomCoords=True)
         AllChem.UFFOptimizeMolecule(mol)
         mol = Chem.RemoveHs(mol)
         conf = mol.GetConformer(0).GetPositions()
@@ -172,7 +173,7 @@ def get_peptide_info(pep):
     return peptide_dict
 
 
-def get_input_from_file(mol, pdb, data_id='', pdbid=''):
+def get_input_from_file(mol, pdb, data_id='', pdbid='', return_mol=False):
     pocmol_data, mol = get_pocmol_data(mol, pdb, data_id, pdbid, return_mol=True)
     
     # if 'torsional' in modes:
@@ -186,7 +187,11 @@ def get_input_from_file(mol, pdb, data_id='', pdbid=''):
         'mmpa': decompose_mmpa(mol),
     }
     pocmol_data.update(decom_info)
-    return pocmol_data
+    
+    if not return_mol:
+        return pocmol_data
+    else:
+        return pocmol_data, mol
 
 
 def get_pocmol_data(mol, pdb, data_id='', pdbid='', return_mol=False):
@@ -200,16 +205,20 @@ def get_pocmol_data(mol, pdb, data_id='', pdbid='', return_mol=False):
             # mol = Chem.MolFromMolFile(mol)
         elif mol.endswith('.pdb'):
             mol = Chem.MolFromPDBFile(mol)
-        elif mol.endswith('peptide'): # pep design. make dummy pep with len
-            n_res = int(mol.split('_')[0])
+        # elif mol.endswith('peptide'): # pep design. make dummy pep with len
+        elif mol.startswith('peplen_'): # pep design. make dummy pep with len
+            n_res = int(mol.split('_')[1])
             mol = 'NCC(=O)' * n_res
             mol = get_make_mol_from_smiles(mol)
-        elif mol.startswith('peptide'):  # peptide sequence
+        # elif mol.startswith('peptide'):  # peptide sequence
+        elif mol.startswith('pepseq_'):  # peptide sequence
             seq = mol.split('_')[1]
             pep_pdb = build_peptide(seq)
             mol = Chem.MolFromPDBBlock(pep_pdb)
         else: # smiles
             mol = get_make_mol_from_smiles(mol)
+    else:
+        mol = get_make_mol_from_smiles('C')
     mol = Chem.RemoveAllHs(mol)
     if mol_list is None:
         mol_list = [mol]
@@ -237,21 +246,23 @@ def get_pocmol_data(mol, pdb, data_id='', pdbid='', return_mol=False):
     else:
         return data, mol
 
-def extract_pocket(protein_path, mol_path, radius=10, save_path=None):
+def extract_pocket(protein_path, mol_path, radius=10, save_path=None, criterion='center_of_mass'):
     if protein_path is None:
         return ''
-    if mol_path.endswith('.sdf'):
+    if isinstance(mol_path, Chem.Mol):
+        mol = mol_path
+    elif mol_path.endswith('.sdf'):
         mol = Chem.MolFromMolFile(mol_path)
     elif mol_path.endswith('.pdb'):
         mol = Chem.MolFromPDBFile(mol_path)
     else:
         mol = None
     if mol is None:
-        raise ValueError('Invalid mol file:', mol_path)
+        raise ValueError('Invalid mol file for extracting pocket:', mol_path)
     pdb = PDBProtein(protein_path)
-    selected_pocket = pdb.query_residues_ligand(mol, radius=radius)
+    selected_pocket = pdb.query_residues_ligand(mol, radius=radius, criterion=criterion)
     if len(selected_pocket) == 0:
-        raise ValueError('Empty pocket within the radius')
+        raise ValueError('Empty pocket within the radius. Please check your pocket_args configuration.')
     pocket_block = pdb.residues_to_pdb_block(selected_pocket)
     # pdb = PDBProtein(pocket_block)
     # save pocket
@@ -273,7 +284,7 @@ def process_raw(data_id='', mol_path=None, protein_path=None, pdbid='',
         mol = Chem.MolFromSmiles(mol_path)
         # add 3D conformer
         mol = Chem.AddHs(mol)
-        AllChem.EmbedMolecule(mol)
+        AllChem.EmbedMolecule(mol)  # bug for large mol. see func: get_make_mol_from_smiles
         AllChem.UFFOptimizeMolecule(mol)
         # move to pocket center
         pocket_center = np.array(kwargs['pocket_center']).reshape([1, 3])
