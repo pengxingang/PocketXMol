@@ -340,7 +340,7 @@ In most cases, you only need to find a task template configuration file and modi
 
 
 ## Customized setting explanation
-Here we explain the customized settings in the `examples/pepdesign_hot136E` directory.
+Here we explain the customized settings in the `examples/pepdesign_hot136E` directory. 
 
 In these settings, we defined a task called `custom`. (Basically, all the previous common tasks can be expressed through this `custom` task.)
 The basic idea is to (1) define several groups of noise, (2) partition the molecules into several parts, and (3) map the noise groups to the molecule parts.
