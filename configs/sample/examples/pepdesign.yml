@@ -32,7 +32,6 @@ transforms:
 
 
 #  The following defines the peptide design task
-
 task:
   name: pepdesign
   transform:

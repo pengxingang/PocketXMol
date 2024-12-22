@@ -1,0 +1,141 @@
+
+sample:
+  seed: 2024
+  batch_size: 50
+  num_mols: 100
+  save_traj_prob: 0.02
+
+
+data:
+  protein_path: data/examples/hot136E/PDL1_3bik_pro.pdb
+  input_ligand: data/examples/hot136E/PDL1_pephot136E_pep.pdb
+  is_pep: True
+  pocket_args:
+    ref_ligand_path: data/examples/hot136E/center_hot136E.sdf
+    radius: 20
+  pocmol_args:
+    data_id: PDL1_pephot136E
+    pdbid: 3bik
+
+
+transforms:
+  variable_sc_size:  # distributions of number of side-chain atoms
+    name: variable_sc_size
+    applicable_tasks: ['custom']
+    num_atoms_distri:
+      mean: 8.5
+      std:
+        coef: 0.3817
+        bias: 1.8727
+    not_remove: [45, 46, 47, 48]  # do not remove these side-chain atoms (-CCOOH)
+  featurizer_pocket:
+    center: [12.9130, -5.3910, -30.0240]  # space center for denosing
+
+
+#  The following defines the custom peptide design task
+
+task:
+  name: custom
+  transform:
+    name: custom
+    is_peptide: True
+    partition:  # partition all atoms into different parts
+      - name: Canchor
+        nodes: [45]  # -C-, the anchor of CCOOH
+      - name: COOH
+        nodes: [46, 47, 48]  # -COOH
+      - name: bbanchor
+        nodes: [0, 1,  # CA, N of backbones
+             9, 10,
+             14, 15,
+             23, 24,
+             31, 32,
+             40, 41,
+             49, 50,
+             55, 56,
+             62, 63,
+             66, 67]
+      - name: bbbody
+        nodes: [2, 3, # C, O of backbones
+             11, 12,
+             16, 17,
+             25, 26,
+             33, 34,
+             42, 43,
+             51, 52,
+             57, 58,
+             64, 65,
+             68, 69]
+      - name: sc
+        nodes: others
+    fixed:
+      node: [Canchor, COOH, bbanchor, bbbody]
+      pos: [Canchor, COOH]
+      edge:
+      - [Canchor, Canchor]
+      - [Canchor, COOH]
+      - [Canchor, bbbody]
+      - [COOH, COOH]
+      - [COOH, bbanchor]
+      - [COOH, bbbody]
+      - [COOH, sc]
+      - [bbanchor, bbanchor]
+      - [bbanchor, bbbody]
+      - [bbbody, bbbody]
+      - [bbbody, sc]
+
+
+noise:
+  name: custom
+  num_steps: 100
+  init_step: 1
+  prior: # define prior noise for different noise group
+    bb:  # the same as peptide backbone noise in training
+      pos_only: True
+      pos:
+        name: allpos
+        pos: 
+          name: gaussian_simple
+          sigma_max: 3
+    sc:  # the same as peptide side-chain noise in training
+      node:
+        name: categorical
+        prior_type: predefined
+        prior_probs: [75, 10, 13, 0, 0, 0.3, 0, 0, 0, 0, 0, 98]
+      pos: 
+        name: allpos
+        pos:
+          name: gaussian_simple
+          sigma_max: 3
+      edge: 
+        name: categorical
+        prior_type: tomask_half
+  level: # define infomation level  for different noise group
+    bb:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+    sc:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+  mapper:  # map the noise groups to the molecular parts
+    bb:
+      pos: [bbanchor, bbbody]
+    sc:
+      node: [sc]
+      pos: [sc]
+      edge:
+      - [Canchor, bbanchor]
+      - [Canchor, sc]
+      - [bbanchor, sc]
+      - [sc, sc]
+
