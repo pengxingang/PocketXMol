@@ -1,7 +1,6 @@
 from copy import deepcopy
 import os
 
-# os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 import sys
 sys.path.append('.')
 import argparse
@@ -36,13 +35,9 @@ if os.environ.get("TERM_PROGRAM") == "vscode":
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--exp_name', type=str, default='PDL1_hot135E_free_CCOOH_20231222_230002')
-    parser.add_argument('--exp_name', type=str, default='PDL1_gen20_20231224_143110')
-    parser.add_argument('--result_root', type=str, default='./outputs_use/PDL1/dock_generated')
-    # parser.add_argument('--result_root', type=str, default='outputs_vscode_use/PDL1/pd1hot136E/PDL1/pd1hot136E')
-    # parser.add_argument('--result_root', type=str, default='outputs_vscode_use/PDL1/dock_generated/PDL1/dock_generated')
-    parser.add_argument('--config', type=str,
-        default='./configs/multi_gpus/use/PDL1/belief.yml')
+    parser.add_argument('--exp_name', type=str, default='pepdesign')
+    parser.add_argument('--result_root', type=str, default='./outputs_use')
+    parser.add_argument('--config', type=str, default='./configs/sample/confidence/tuned_cfd.yml')
     parser.add_argument('--device', type=str, default='cuda:2')
     parser.add_argument('--batch_size', type=int, default=0)
     args = parser.parse_args()

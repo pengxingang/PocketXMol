@@ -1,6 +1,10 @@
 
 sample:
-  seed: 2023
+  seed: 2024
+  batch_size: 50
+
+model:
+  checkpoint: data/trained_models/pxm/checkpoints/pocketxmol.ckpt
 
 
 # the following should not be changed for getting belief

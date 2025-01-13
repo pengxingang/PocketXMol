@@ -44,7 +44,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp_name', type=str, default='base_pxm')
     parser.add_argument('--result_root', type=str, default='./outputs_test/dock_posebusters')
-    parser.add_argument('--config', type=str, default='configs/sample/tuned_ranker.yml', help='confidence config')
+    parser.add_argument('--config', type=str, default='configs/sample/confidence/tuned_cfd.yml', help='confidence config')
     parser.add_argument('--device', type=str, default='cuda:1')
     parser.add_argument('--batch_size', type=int, default=0)
     parser.add_argument('--num_workers', type=int, default=1)

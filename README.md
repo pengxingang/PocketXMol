@@ -23,6 +23,8 @@ This is a *preliminary* code release for the pocket-interacting foundation model
   * [*De novo* peptide design](#de-novo-peptide-design)
   * [Peptide inverse folding](#peptide-inverse-folding)
 - [Sample for provided data](#sample-for-provided-data)
+    * [Usage examples](#usage-examples)
+    * [Confidence scores for sampled molecules](#confidence-scores-for-sampled-molecules)
     * [Basic configuration explanation](#basic-configuration-explanation)
     * [Customized setting explanation](#customized-setting-explanation)
 - [Train](#train)
@@ -103,7 +105,7 @@ Configuration files include:
 
 
 #### Confidence scores
-The self-confidence scores are in the `gen_info.csv` file produced during the sampling process. To calculate other confidence scores for the generated molecular poses, use the following command: 
+The self-confidence scores are in the `gen_info.csv` (column `cfd_traj`) file produced during the sampling process. To calculate other confidence scores for the generated molecular poses, use the following command: 
 ```python
 python scripts/believe.py \
     --exp_name base_pxm \
@@ -114,7 +116,7 @@ python scripts/believe.py \
 The parameters:
 - `result_root` is the directory containing the sampling experiments (equal to the parameter `outdir` of the sampling command).
 - `exp_name` is the name of the sampling experiment directory (looks like `base_pxm_20241030_225401`). If there is only one experiment with the name starting with the `exp_name`, the appended timestamp can be omitted (i.e., set as `base_pxm`).
-- `config` is the confidence model confifuration file. They are in `configs/sample/confidence` including:
+- `config` is the confidence model configuration file. They are in `configs/sample/confidence` including:
     - `tuned_cfd.yml`: the tuned confidence predictor
     - `flex_cfd.yml`: using original model with flexible noise for confidence prediction
 
@@ -267,6 +269,9 @@ The task configuration file is `configs/sample/test/pepinv_pepbdb/base.yml`.
 
 
 # Sample for provided data
+
+## Usage examples
+
 Here, we demonstrate some examples of sampling using the provided data in the `data/examples` directory.
 
 
@@ -306,6 +311,25 @@ The configuration files are in `configs/sample/examples`, including:
 
 More examples are on the way.
 
+## Confidence scores for sampled molecules
+
+The self-confidence scores are in the `gen_info.csv` (column `cfd_traj`) file produced during the sampling process. To calculate other confidence scores for the generated molecules, use the command like this:
+```python
+python scripts/believe_use_pdb.py \
+    --exp_name pepdesign_pxm_20210101_150132 \
+    --result_root outputs_use \
+    --config configs/sample/confidence/tuned_cfd.yml \
+    --device cuda:0
+```
+The parameters:
+- `result_root` is the directory containing the sampling experiments (equal to the parameter `outdir` of the sampling command).
+- `exp_name` is the name of the sampling experiment directory (looks like `pepdesign_pxm_20210101_150132`). If there is only one experiment with the name starting with the `exp_name`, the appended timestamp can be omitted (i.e., set as `pepdesign_pxm`).
+- `config` is the confidence model configuration file. They are in `configs/sample/confidence` including:
+    - `tuned_cfd.yml`: the tuned confidence predictor
+    - `flex_cfd.yml`: using original model with flexible noise for confidence prediction
+
+After running, the `.csv` files of confidence scores will be saved at the `ranking` sub-directory.
+
 ## Basic configuration explanation
 
 You can refer to these configuration files and adapt to your own data and tasks. Here are some simple explanations of the configuration.
@@ -328,7 +352,7 @@ In most cases, you only need to find a task template configuration file and modi
     - `pocmol_args`: user-defined identifiers. Not important.
         - `data_id`
         - `pdbid`
-- `transforms`
+- `transforms` (optional): the extra data processing parameters, including
     - `featurizer_pocket`:
         - `center`: coordinate space center for denoising. It influences sampling atom coordinates from the Gaussian noise at the first step. If not set, it will be automatically defined as the average of pocket atom coordinates. (You can also use `featurizer/mol_as_pocket_center` to specify the pocket center)
     - `featurizer`

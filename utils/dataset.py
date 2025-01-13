@@ -124,7 +124,7 @@ class RegenDataset(Dataset):
             self.sdf_dir = os.path.join(gen_path, 'SDF')
         
         # load pocket_pdb
-        pocket_path = os.path.join(self.sdf_dir, 'pocket_block.pdb')
+        pocket_path = os.path.join(self.sdf_dir, '0_inputs', 'pocket_block.pdb')
         with open(pocket_path, 'r') as f:
             self.pocket_pdb = f.read()
         
