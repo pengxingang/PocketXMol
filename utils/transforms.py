@@ -464,6 +464,7 @@ class VariableMolSize(object):  # for sampling
             data = self.add_atoms(data, n_atoms_new, n_atoms_data)
         elif n_atoms_new < n_atoms_data: # remove atoms
             data = self.remove_atoms(data, n_atoms_new, n_atoms_data)
+            n_atoms_new = data['node_type'].shape[0]
         # common
         if 'is_peptide' in data:
             is_peptide = data['is_peptide']
@@ -564,6 +565,8 @@ class VariableMolSize(object):  # for sampling
         is_removable[self.not_remove] = False
         n_removable = is_removable.sum()
         n_remove = min(n_remove, n_removable)
+        if n_remove == 0:
+            return data
 
         is_atom_remain = torch.ones([n_atoms_data], dtype=torch.bool)
         index_removable = torch.nonzero(is_removable)[:, 0]
@@ -1544,11 +1547,11 @@ class MaskfillTransform:
         assert (grouped_node_p1 is not None) or (node_p2 is not None), 'grouped_node_p1 or node_p2 should be set'
         
         if grouped_node_p1 is None:
-            assert node_p2 is not None, 'node_p2 should be not None'
+            assert node_p2 is not None, 'Neither grouped_node_p1 nor node_p2 is set'
             node_p1 = [n for n in index_nodes if n not in node_p2]
             grouped_node_p1 = [node_p1]
         if node_p2 is None:
-            assert grouped_node_p1 is not None, 'grouped_node_p1 should not be None'
+            assert grouped_node_p1 is not None, 'Neither grouped_node_p1 nor node_p2 is set'
             node_p1 = sum(grouped_node_p1, [])
             node_p2 = [n for n in index_nodes if n not in node_p1]
         #TODO: print partition

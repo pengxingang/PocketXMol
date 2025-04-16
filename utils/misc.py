@@ -143,7 +143,7 @@ def get_new_log_dir(root='./logs', prefix='', tag=''):
 def seed_all(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
-    random.seed(seed)
+    random.seed(int(seed))
 
 
 def log_hyperparams(writer, args):

@@ -55,7 +55,7 @@ if __name__ == '__main__':
     seed_all(seed)
     # config.sample.complete_seed = seed.item()
     # load ckpt and train config
-    ckpt = torch.load(config.model.checkpoint, map_location=args.device)
+    ckpt = torch.load(config.model.checkpoint, map_location=args.device, weights_only=False)
     cfg_dir = os.path.dirname(config.model.checkpoint).replace('checkpoints', 'train_config')
     train_config = os.listdir(cfg_dir)
     train_config = make_config(os.path.join(cfg_dir, ''.join(train_config)))

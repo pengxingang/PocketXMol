@@ -14,19 +14,6 @@ data:
     radius: 13
 
 
-task:
-  name: maskfill
-  transform:
-    name: maskfill
-    preset_partition:
-      grouped_node_p1: [[0, 1, 2, 3, 4, 5, 6]]  # atom indices of initial fragment
-    settings:
-      part1_pert:
-        fixed: 1
-      known_anchor:
-        none: 1
-
-
 transforms:
   variable_mol_size:  # variable mol size
     name: variable_mol_size
@@ -42,6 +29,18 @@ transforms:
 
 
 # The following is for fragment growing with fixed fragment position
+
+task:
+  name: maskfill
+  transform:
+    name: maskfill
+    preset_partition:
+      grouped_node_p1: [[0, 1, 2, 3, 4, 5, 6]]  # atom indices of initial fragment
+    settings:
+      part1_pert:
+        fixed: 1
+      known_anchor:
+        none: 1
 
 
 noise:

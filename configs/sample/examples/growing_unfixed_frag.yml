@@ -12,18 +12,6 @@ data:
   is_pep: False
   pocket_args:
     radius: 13
-  
-task:
-  name: growing
-  transform:
-    name: growing
-    preset_partition:
-      init_frag: [0, 1, 2, 3, 4, 5, 6]  # atom indices of initial fragment
-    settings:
-      part1_pert:
-        free: 1
-      known_anchor:
-        none: 1
 
 transforms:
   variable_mol_size:  # variable mol size
@@ -41,6 +29,17 @@ transforms:
 
 # The following is for fragment growing with unfixed fragment position
 
+task:
+  name: growing
+  transform:
+    name: growing
+    preset_partition:
+      init_frag: [0, 1, 2, 3, 4, 5, 6]  # atom indices of initial fragment
+    settings:
+      part1_pert:
+        free: 1
+      known_anchor:
+        none: 1
 
 noise:
   name: fbdd
