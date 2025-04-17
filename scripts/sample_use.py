@@ -118,8 +118,8 @@ if __name__ == '__main__':
     logger.info(args)
     logger.info(config)
     save_config(config, os.path.join(log_dir, os.path.basename(args.config_task)))
-    for script_dir in ['scripts', 'utils', 'models']:
-        shutil.copytree(script_dir, os.path.join(log_dir, script_dir))
+    # for script_dir in ['scripts', 'utils', 'models']:
+    #     shutil.copytree(script_dir, os.path.join(log_dir, script_dir))
     sdf_dir = os.path.join(log_dir, 'SDF')
     pure_sdf_dir = os.path.join(log_dir, os.path.basename(log_dir) +'_SDF')
     os.makedirs(sdf_dir, exist_ok=True)
