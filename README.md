@@ -177,7 +177,7 @@ In most cases, you only need to find a task template configuration file and modi
     - `protein_path`: the path to the protein PDB file.
     - `input_ligand`: the information of input ligand.
         - For small molecule, it can be a SDF file path, the SMILES string or `None` (for *de novo* small mol design).
-        - For peptide, it can be the PDB file path, the sequence string (with prefix `pep_seq_`, e.g., pepseq_DTVFALFW, for docking) or the sequence length (with prefix `peplen_`, e.g., peplen_10, for *de novo* design).
+        - For peptide, it can be the PDB file path, the sequence string (with prefix `pepseq_`, e.g., pepseq_DTVFALFW, for docking) or the sequence length (with prefix `peplen_`, e.g., peplen_10, for *de novo* design).
     - `is_pep`: bool, whether the ligand is peptide. It is used to create the PDB files for the generated molecules. If not set, it will be automatically determined according to `input_ligand`.
     - `pocket_args`: dict of pocket parameters, including
         - `ref_ligand_path`: path to the reference molecule file (SDF or PDB). This molecule is used to determine the pocket from the complete protein, i.e., the residues within a certain distance to the reference molecule are defined as pocket residues. Exclusive to `pocket_coord`.

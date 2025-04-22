@@ -363,8 +363,9 @@ if __name__ == '__main__':
                 
                 # clean up
                 del batch, outputs, trajs, mol_info_list[0:len(mol_info_list)]
-                with torch.cuda.device(args.device):
-                    torch.cuda.empty_cache()
+                if args.device != 'cpu':
+                    with torch.cuda.device(args.device):
+                        torch.cuda.empty_cache()
                 gc.collect()
 
 

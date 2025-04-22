@@ -1325,7 +1325,7 @@ class MaskfillSampleNoiser(BaseSampleNoiser):
                 (threshold_bond - cfd_node_with_bond).clamp(min=0),
             ]
             for possibility_p2 in possibility_p2_list:
-                size_select = np.int(np.round((possibility_p2>0).sum().item() *
+                size_select = int(np.round((possibility_p2>0).sum().item() *
                                 (1 - step_ar / max_ar_step) *
                                 max_p2_ratio))
                 if size_select > 0:

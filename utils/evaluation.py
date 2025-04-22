@@ -387,7 +387,7 @@ class RingAnalyzer(object):
         self.freq_val_rings = [Chem.MolFromSmiles(ring) for ring in freq_val_rings]
         
     def get_count_ring(self, mols):
-        counts = np.zeros([len(mols), len(self.freq_val_rings)], dtype=np.int)
+        counts = np.zeros([len(mols), len(self.freq_val_rings)], dtype=np.int64)
         for i, mol in enumerate(mols):
             for j, ring in enumerate(self.freq_val_rings):
                 counts[i, j] = self.get_counts(mol, ring)

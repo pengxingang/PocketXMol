@@ -784,7 +784,7 @@ class FeaturizeMol(object):
         # atom_prob = np.ones(len(atom_type))
         isnot_masked_atom = (atom_type < self.num_element) & (atom_type >= 0)
         if not isnot_masked_atom.all():
-            edge_index_changer = - np.ones(len(isnot_masked_atom), dtype=np.int)
+            edge_index_changer = - np.ones(len(isnot_masked_atom), dtype=np.int64)
             edge_index_changer[isnot_masked_atom] = np.arange(isnot_masked_atom.sum())
         atom_type = atom_type[isnot_masked_atom]
         # atom_prob = atom_prob[isnot_masked_atom]
