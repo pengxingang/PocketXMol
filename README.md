@@ -105,9 +105,9 @@ If you want to train the model with the full training data, please follow the in
 
 # Sample for provided data
 
-> We also provide interactive Colab notebooks for sampling. You can find the notebooks in the `notebook` directory:
-> - Dock [![Open in colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/main/notebooks/PXM_Dock.ipynb)
-> - Peptide Design [![Open in colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/main/notebooks/PXM_PeptideDesign.ipynb)
+> We also provide interactive Colab notebooks for sampling. You can find the notebooks in the [notebooks](notebooks) directory:
+> - Dock [![Open in colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/master/notebooks/PXM_Dock.ipynb)
+> - Peptide Design [![Open in colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/master/notebooks/PXM_PeptideDesign.ipynb)
 <!-- > - Small molecule design [![dock](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/main/notebooks/PXM_SmallMoleculeDesign.ipynb) -->
 
 ## Usage examples
