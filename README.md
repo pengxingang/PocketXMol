@@ -105,6 +105,11 @@ If you want to train the model with the full training data, please follow the in
 
 # Sample for provided data
 
+> We also provide interactive Colab notebooks for sampling. You can find the notebooks in the `notebook` directory:
+> - Dock [![dock](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/main/notebooks/PXM_Dock.ipynb)
+> - Peptide Design [![dock](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/main/notebooks/PXM_PeptideDesign.ipynb)
+<!-- > - Small molecule design [![dock](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/main/notebooks/PXM_SmallMoleculeDesign.ipynb) -->
+
 ## Usage examples
 
 Here, we demonstrate some examples of sampling using the provided data in the `data/examples` directory.
