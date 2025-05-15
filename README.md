@@ -132,6 +132,7 @@ The configuration files are in `configs/sample/examples`, including:
     - `dock_pep_know_some.yml`: dock, with constrained coordinates of some atoms
 - Small molecule design
     - `sbdd.yml`: design drug-like molecules for protein pocket
+    - `sbdd_simple.yml`: design drug-like molecules for protein pocket (no refinement rounds)
     - `growing_unfixed_frag.yml`: fragment growing with unfixed fragment pose, i.e., design small molecules containing a specified fragment graph for protein pocket
     - `growing_fixed_frag.yml`: fragment growing with fixed fragment pose, i.e., design small molecules containing a specified fragment with fixed pose for protein pocket
 - Peptide design

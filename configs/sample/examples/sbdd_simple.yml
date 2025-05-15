@@ -1,0 +1,54 @@
+
+sample:
+  seed: 2024
+  batch_size: 100
+  num_mols: 100
+  save_traj_prob: 0.02
+
+
+data:
+  protein_path: data/examples/smallmol/2ar9_A.pdb
+  is_pep: False
+  pocket_args:
+    pocket_coord: [-8.1603, 36.6972, 38.7714]
+    radius: 15
+  pocmol_args:
+    data_id: sbdd_2ar9
+    pdbid: 2ar9
+
+
+transforms:
+  featurizer_pocket:
+    center: [-8.1603, 36.6972, 38.7714]  # space center for denosing
+  variable_mol_size:  # variable mol size
+    name: variable_mol_size
+    num_atoms_distri:
+      strategy: mol_atoms_based  # mol size from Normal(mean=28, std=2)
+      mean:
+        coef: 0
+        bias: 28
+      std:
+        coef: 0
+        bias: 2
+      min: 5
+
+
+# The following defines sbdd task (refine-based)
+
+task:
+  name: sbdd
+  transform:
+    name: sbdd
+
+noise:
+  name: sbdd
+  num_steps: 100
+  prior: from_train
+  level:
+    name: advance
+    min: 0.
+    max: 1.
+    step2level:
+      scale_start: 0.99999
+      scale_end: 0.00001
+      width: 3
