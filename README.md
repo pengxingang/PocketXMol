@@ -107,7 +107,7 @@ If you want to train the model with the full training data, please follow the in
 
 > We provide interactive Colab notebooks for sampling. You can find the notebooks in the [notebooks](notebooks) directory:
 > - Dock [![Open in colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/master/notebooks/PXM_Dock.ipynb)
-> - Peptide Design [![Open in colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/master/notebooks/PXM_PeptideDesign.ipynb)
+> - Peptide design [![Open in colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/master/notebooks/PXM_PeptideDesign.ipynb)
 > - Small molecule design [![dock](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/pengxingang/PocketXMol/blob/master/notebooks/PXM_SmallMoleculeDesign.ipynb)
 
 ## Usage examples
@@ -122,6 +122,10 @@ python scripts/sample_use.py \
     --outdir outputs_examples \
     --device cuda:0
 ```
+> NOTE:
+> - The **batch size** for sampling is defined in the configuration files. If the batch size is too large for your GPU memory, please reduce `batch_size` in the configuration files or directly set the batch size in the command line (e.g., `--batch_size 100`).
+> - After sampling, there will be a new directory in the specified `outdir` containing the generated results. The new directory is named as `{exp_name}_{timestamp}` where `exp_name` is created from the names of the configuration file and `timestamp` is the time when the experiment starts. Within it, the `{exp_name}_{timestamp}_SDF` subdirectory contains the generated molecules, the `SDF` subdirectory contains the sampling trajectory (if any), and files `gen_info.csv` and `log.txt` contain the generation information.
+
 The configuration files are in `configs/sample/examples`, including:
 - Docking
     - `dock_smallmol.yml`: dock a small molecule to a protein pocket

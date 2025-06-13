@@ -86,6 +86,7 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, default='cuda:1')
     parser.add_argument('--batch_size', type=int, default=0, help='batch size; by default use the value in the config file')
     parser.add_argument('--shuffle', type=bool, default=False)
+    parser.add_argument('--num_workers', type=int, default=-1, help='num_workers for dataloader; by default use the value in the train config file')
     args = parser.parse_args()
 
     # # Load configs
@@ -170,7 +171,7 @@ if __name__ == '__main__':
     test_set = UseDataset(data, n=num_mols, task=config.task.name, transforms=transforms)
 
     test_loader = DataLoader(test_set, batch_size, shuffle=args.shuffle,
-                            num_workers = train_config.train.num_workers,
+                            num_workers = train_config.train.num_workers if args.num_workers == -1 else args.num_workers,
                             pin_memory = train_config.train.pin_memory,
                             follow_batch=follow_batch, exclude_keys=exclude_keys)
     # save pocket and mol
