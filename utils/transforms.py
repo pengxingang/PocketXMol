@@ -416,7 +416,7 @@ class VariableScSize(object):  # for sampling
         peptide_is_removable = peptide_is_sc
         peptide_is_removable[self.not_remove] = False
         # n_bb, n_sc = peptide_is_backbone.sum(), peptide_is_sc.sum()
-        n_removable = peptide_is_removable.sum()
+        n_removable = peptide_is_removable.sum().item()
         n_remove = min(n_remove, n_removable)
 
         is_atom_remain = torch.ones([n_atoms_data], dtype=torch.bool)
@@ -563,7 +563,7 @@ class VariableMolSize(object):  # for sampling
 
         is_removable = torch.ones([n_atoms_data], dtype=torch.bool)
         is_removable[self.not_remove] = False
-        n_removable = is_removable.sum()
+        n_removable = is_removable.sum().item()
         n_remove = min(n_remove, n_removable)
         if n_remove == 0:
             return data
