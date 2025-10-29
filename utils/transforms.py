@@ -343,6 +343,7 @@ class VariableScSize(object):  # for sampling
                 data = self.add_atoms(data, n_atoms_new, n_atoms_data)
             elif n_atoms_new < n_atoms_data: # remove atoms
                 data = self.remove_atoms(data, n_atoms_new, n_atoms_data)
+                n_atoms_new = data['node_type'].shape[0]
             # common
             if 'is_peptide' in data:
                 is_peptide = data['is_peptide']
