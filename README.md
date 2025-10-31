@@ -199,10 +199,10 @@ In most cases, you only need to find a task template configuration file and modi
         - `pdbid`
 - `transforms` (optional): the extra data processing parameters, including
     - `featurizer_pocket`:
-        - `center`: coordinate space center for denoising. It influences sampling atom coordinates from the Gaussian noise at the first step. If not set, it will be automatically defined as the average of pocket atom coordinates. (You can also use `featurizer/mol_as_pocket_center` to specify the pocket center)
+        - `center`: coordinate space center for denoising. It influences sampling atom coordinates from the Gaussian noise at the first step. If not set, it will be automatically defined as the average of pocket atom coordinates (You can also use `featurizer/mol_as_pocket_center` to specify the pocket center). This is useful when you have prior knowledge of space for generation. For example, for linker design, you can set the center as the midpoint of the two fragments to be linked.
     - `featurizer`
         - `mol_as_pocket_center`: bool, use the center coordinates of the ligand as the space center. If set to `True`, the parameter `data/pocket_args/input_ligand` should be SDF/PDB file. (You can also use `featurizer_pocket/center` to specify the pocket center)
-    - `variable_mol_size`: distributions of the number of atoms for small-molecule designing tasks.
+    - `variable_mol_size`: distributions of the number of atoms for small-molecule designing tasks. It will automatically add or remove atoms from the input ligand. Remember to set its `not_remove` parameter if you want to exclude some atoms from being removed (see example usage in `growing_fixed_frag.yml` and `growing_unfixed_frag.yml`).
     - `variable_sc_size`: distributions of number of side-chain atoms for peptide designing. The default value should work well.
 - `task`: the task and its specific mode.
 - `noise`: the task nosie parameters.
