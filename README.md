@@ -1,6 +1,6 @@
 # PocketXMol
 
-This is a *preliminary* code release for the pocket-interacting foundation model "**PocketXMol**".
+This repository provides the original code release for **PocketXMol**, the pocket-interacting foundation model introduced in the paper *Learning fundamental atom interactions for unified modeling of 3D molecule generation*.
 
 > Please note that this code is a preview version and has yet to be cleaned up and refactored. It may be hard to read but should be functional for running. We will continue to improve the code and provide more detailed instructions in the future.  
 
@@ -9,7 +9,7 @@ This is a *preliminary* code release for the pocket-interacting foundation model
 <!-- toc -->
 **Contents**
 - [Setup](#setup)
-  * [Environment](#environment)
+  * [Dependency](#dependency)
   * [Data and model weights](#data-and-model-weights)
     * [Example data and model weights for sampling](#example-data-and-model-weights-for-sampling)
     * [Processed test data and model weights for sampling](#processed-test-data-and-model-weights-for-sampling)
