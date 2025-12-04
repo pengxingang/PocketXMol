@@ -2,7 +2,7 @@
 
 This repository provides the original code release for **PocketXMol**, the pocket-interacting foundation model introduced in the paper *Learning fundamental atom interactions for unified modeling of 3D molecule generation*.
 
-> Please note that this code is a preview version and has yet to be cleaned up and refactored. It may be hard to read but should be functional for running. We will continue to improve the code and provide more detailed instructions in the future.  
+> Please note the code has not yet been fully cleaned or refactored. It may be hard to read, but it should be functional for running. We will continue to improve the code and provide more detailed instructions in the future.  
 
 > This repository is modified from the [MolDiff](https://github.com/pengxingang/MolDiff) repository (a good starting point for diffusion-based molecular generation). We thank the authors for their work.
 
