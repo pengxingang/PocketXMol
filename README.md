@@ -55,7 +55,7 @@ pip install pytorch-lightning
 pip install torch_geometric
 pip install torch_scatter torch_sparse torch_cluster -f https://data.pyg.org/whl/torch-2.6.0+cu126.html
 pip install biopython==1.83 rdkit==2023.9.3 peptidebuilder==1.1.0
-pip install openbabel=3.1.1.1  # or, conda install -c conda-forge openbabel -y
+pip install openbabel==3.1.1.1  # or, conda install -c conda-forge openbabel -y
 pip install lmdb easydict==1.9 numpy==1.24 pandas==1.5.2
 pip install tensorboard
 ```
@@ -64,11 +64,13 @@ pip install tensorboard
 
 ## Data and model weights
 
+The train/test data and model weights are available on [Zenodo](https://zenodo.org/records/17801271).
+
 ### Example data and model weights for sampling
 
 The example data are included in the `data/examples` directory, which are used to demonstrate the usage in [Sample for provided data](#sample-for-provided-data).
 
-The model weights for sampling are included in the file `model_weights.tar.gz` available from the [Google Drive](https://drive.google.com/file/d/1Hu6qTkCyNUPPsQLLHL1kBFiwRbKUOFLs/view?usp=drive_link).
+The model weights for sampling are included in the file [`model_weights.tar.gz`](https://zenodo.org/records/17801271/files/model_weights.tar.gz?download=1) from [Zenodo](https://zenodo.org/records/17801271).
 Download and extract it using the command:
 ```bash
 tar -zxvf model_weights.tar.gz
@@ -77,23 +79,23 @@ After extraction, there will be a directory named `data/trained_model` which con
 
 ### Processed test data and model weights for sampling
 
-For **sampling for test sets**, the processed test data and trained model weights are included in the file `data_test.tar.gz` available from the [Google Drive](https://drive.google.com/drive/folders/1-nmm2O_bHdYastqbtSkIXJRL247MkAWf?usp=sharing).
+For **sampling for test sets**, the processed test data and trained model weights are included in the file [`data_test.tar.gz`](https://zenodo.org/records/17801271/files/data_test.tar.gz?download=1) from [Zenodo](https://zenodo.org/records/17801271).
 Download and extract it using the command:
 ```bash
 tar -zxvf data_test.tar.gz
 ```
 After extraction, there will be a directory named `data` which contains:
-- test sets: `test` for benchmark related information; `csd` for CrossDocked2020 set, `geom` for GEOM-Drug set, `moad` for Binding MOAD set, `pepbdb` for PepBDB set, `poseboff` for PoseBusters set, and `protacdb` for PROTAC-DB set.
+- test sets: `test` for benchmark-related information; `csd` for CrossDocked2020 set, `geom` for GEOM-Drug set, `moad` for Binding MOAD set, `pepbdb` for PepBDB set, `poseboff` for PoseBusters set, and `protacdb` for PROTAC-DB set.
 - trained model weights in the `trained_model` directory for sampling.
 - example data files (in `examples` directory) for demonstrating the sampling for user-provided files.
 
 
 ### Processed data for training
 
-For **training**, the demonstrative processed training data are in the file `data_train_processed_reduced.tar.gz` from the [Google Drive](https://drive.google.com/drive/folders/1-nmm2O_bHdYastqbtSkIXJRL247MkAWf?usp=sharing).
-The complete processed training data are too large (>500G) so we provide a reduced subset just to demonstrate the training process. Similarly, download and extract it using the command:
+For **training**, the demonstrative processed training data are in the file [`data_train_processed.tar.gz`](https://zenodo.org/records/17801271/files/data_train_processed.tar.gz?download=1) from [Zenodo](https://zenodo.org/records/17801271).
+The complete processed training data are too large (>500 GB), so we provide a reduced subset just to demonstrate the training process. Similarly, download and extract it using the command:
 ```bash
-tar -zxvf data_train_processed_reduced.tar.gz
+tar -zxvf data_train_processed.tar.gz
 ```
 Then there is a directory named `data_training` containing reduced training sets for demonstrative training.
 
