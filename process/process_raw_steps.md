@@ -1,10 +1,10 @@
 
-> This note contains the scripts to process the raw data .
+> This note contains the scripts to process the raw data for training PocketXMol.
 
 # Step 1: Prepare raw training data
-1. The raw data and files are in the [Google Drive](https://drive.google.com/drive/folders/1-nmm2O_bHdYastqbtSkIXJRL247MkAWf?usp=drive_link).
-    - Download the file `data_train_raw.tar.gz` and extract it to the root directory of the project.
-    - Download the raw protein/molecule/peptide files for each database (except for the Uni-Mol data) from the `raw_files` directory and extract it to the corresponding directory.
+1. The raw data and files are on [Zenodo](https://zenodo.org/records/17801271).
+    - Download the file [`data_train_raw.tar.gz`](https://zenodo.org/records/17801271/files/data_train_raw.tar.gz?download=1) and extract it to the root directory of the project.
+    - Download the raw protein/molecule/peptide files for each database (except for the Uni-Mol data) zipped in the file [`raw_files.zip`](https://zenodo.org/records/17801271/files/raw_files.zip?download=1), unzip it, and extract datasets to the corresponding directory.
 2. The raw Uni-Mol data is very large (114.76GB). You can download the [molecular pretrain data](https://bioos-hermite-beijing.tos-cn-beijing.volces.com/unimol_data/pretrain/ligands.tar.gz) directly from the original [Uni-Mol repository](https://github.com/deepmodeling/Uni-Mol/tree/main/unimol). Then extract the `ligands.tar.gz` file to the `data_train/unmi/files` directory.
 
 Then you will get the `data_train` directory with the following structure:
@@ -64,7 +64,7 @@ data_train
 
 
 # Step 2: Process raw data
-The following steps are required to process the raw data files. The python commands for each database should be run in order.
+The following steps are required to process the raw data files. The Python commands for each database should be run in order.
 ## GEOM-Drug (geom)
 Run
 ```bash
