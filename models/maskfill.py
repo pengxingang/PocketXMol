@@ -1,37 +1,51 @@
-from easydict import EasyDict
-from tqdm import tqdm
+"""
+PocketXMol - Asymmetric Denoiser for Pocket-Molecule Interaction Modeling
+
+This module (PMAsymDenoiser) implements the core denoising model for pocket-aware 3D molecule generation.
+
+Key components:
+    - Pocket encoder: Encodes protein pocket residues as context
+    - Molecule embedder: Embeds atom types and bond types
+    - Denoiser network: Remove noise from the noisy molecular hidden representations.
+    - Output decoders: Predict clean atom types, positions, and bond types from denoised representations.
+"""
+
+# Third-party imports
 import torch
+from easydict import EasyDict
 from torch.nn import Module
 from torch.nn import functional as F
-# from torch_cluster import radius_graph
-# from torch_geometric.nn import radius, knn
+from tqdm import tqdm
 
-# from models.diffusion import extract
-# from models.egnn import EGNN, EGNNEncodeer
-# from models.transition import CategoricalTransition, ContigousTransition, GeneralCategoricalTransition
+# Local imports
 from models.graph import NodeEdgeNet
 from models.graph_context import ContextNodeEdgeNet
 from models.graph_gvp import ContextNodeEdgeNetGVP
 from models.ipa import ContextGAEdgeNet, GAEncoder
 
-# from .encoders import get_encoder_vn
-# from .fields import SimpleEdgePredictor, get_field_vn, FragmentPosDecoder
-from .common import *
-from .corrector import correct_pos, get_dihedral_batch
-# from .embedding import AtomEmbedding, BondEmbedding
-# from .position import PositionPredictor
-# from .sample_grid import get_grids
-from .diffusion import *
-# from .debug import check_true_bonds_len, check_pred_bonds_len
-# from utils.misc import unique
-
+from models.common import *
+from models.corrector import correct_pos, get_dihedral_batch
+from models.diffusion import *
 
 
 class PMAsymDenoiser(Module):
+    """
+    Pocket-Molecule Asymmetric Denoiser for 3D molecule generation.
+    
+    This model predicts clean molecular structures (atom types, 3D coordinates, and bonds) 
+    from noisy inputs conditioned on the protein pocket and the task prompt variables.
+    
+    Args:
+        config: Model configuration containing architecture parameters
+        num_node_types: Number of atom types in the vocabulary
+        num_edge_types: Number of edge types (typically: 0=none, 1=single, 2=double, 3=triple, 4=aromatic, and 5=MASK if use_edge_mask==True)
+        pocket_in_dim: Input feature dimension for pocket atoms
+    """
+    
     def __init__(self,
         config,
         num_node_types,
-        num_edge_types,  # explicit bond type: 0, 1, 2, 3, 4
+        num_edge_types,
         pocket_in_dim,
         **kwargs
     ):
@@ -41,7 +55,7 @@ class PMAsymDenoiser(Module):
         self.num_edge_types = num_edge_types
         gvp = getattr(config, 'gvp', False)
         
-        # # pocket encoder
+        # Pocket encoder: processes protein context
         pocket_dim = config.pocket_dim
         self.pocket_embedder = nn.Linear(pocket_in_dim, pocket_dim)
         pocket_name = getattr(config.pocket, 'name', 'default')
@@ -51,15 +65,17 @@ class PMAsymDenoiser(Module):
             pocket_encoder_bb = GAEncoder
         self.pocket_encoder = pocket_encoder_bb(pocket_dim, node_only=True, **config.pocket)
         
-        # # mol embedding
+        # Molecule embedding layers
         self.addition_node_features = getattr(config, 'addition_node_features', [])
         node_dim = config.node_dim
         edge_dim = config.edge_dim
-        node_emb_dim = node_dim - 2 - len(self.addition_node_features)  # 2 for fixed node and pos
+        # Reserve 2 dimensions for task prompt (fixed_node, fixed_pos)
+        node_emb_dim = node_dim - 2 - len(self.addition_node_features)
         self.nodetype_embedder = nn.Embedding(num_node_types, node_emb_dim)
-        self.edgetype_embedder = nn.Embedding(num_edge_types, edge_dim-2)  # 2 for fixed edgetype and dist
+        # Reserve 2 dimensions for task prompt (fixed_edge, fixed_dist)
+        self.edgetype_embedder = nn.Embedding(num_edge_types, edge_dim-2)
         
-        # # denoiser
+        # Denoiser network: remove noise from molecule representations
         denoiser_name = getattr(config.denoiser, 'name', 'default')
         if denoiser_name == 'default':
             denoiser_bb = ContextNodeEdgeNet if not gvp else ContextNodeEdgeNetGVP
@@ -68,13 +84,13 @@ class PMAsymDenoiser(Module):
         self.denoiser = denoiser_bb(node_dim, edge_dim,
                             context_dim=pocket_dim, **config.denoiser)
 
-        # # decoder
+        # Output decoders
         self.node_decoder = MLP(node_dim, num_node_types, node_dim)
         self.edge_decoder = MLP(edge_dim, num_edge_types, edge_dim)
         
-        # additional output
+        # Additional outputs (e.g., confidence scores)
         self.add_output = getattr(config, 'add_output', [])
-        if 'confidence' in self.add_output:  # condidence
+        if 'confidence' in self.add_output:
             self.node_cfd = MLP(node_dim, 1, node_dim//2)
             self.pos_cfd = MLP(node_dim, 1, node_dim//2)
             self.edge_cfd = MLP(edge_dim, 1, edge_dim//2)
@@ -82,39 +98,58 @@ class PMAsymDenoiser(Module):
 
     def forward(self, batch, **kwargs):
         """
-        Predict Mol at t=0 given perturbed Mol at t with hidden dims and time
-        Predict the position t=0 and node/edge type reconstruction v_0, given perturbed pos and nodes (r_t, v_t)
+        Forward pass: predicts clean molecule structure from noisy inputs.
+        
+        Given a noisy molecular graph at diffusion timestep t and a protein pocket,
+        predicts the clean molecular structure at t=0 (atom types, 3D positions, bonds).
+        
+        Args:
+            batch: Dictionary containing:
+                - pos_in: Noisy 3D coordinates [N_atoms, 3]
+                - node_in: Noisy node (atom) types [N_atoms]
+                - halfedge_in: Noisy edge (bond) types. [N_edges]. Half means i<j only for all e_ij.
+                - halfedge_index: Edge connectivity [2, N_edges]
+                - fixed_node, fixed_pos: Binary indicators for fixed node_type/node_pos [N_atoms]
+                - fixed_halfedge, fixed_halfdist: Binary indicators for fixed edge_type/edge_dist [N_edges]
+                - pocket_atom_feature: Pocket atom features [N_pocket_atoms, D_pocket]
+                - pocket_pos: Pocket coordinates [N_pocket_atoms, 3]
+                - pocket_knn_edge_index: Pocket connectivity [2, N_pocket_edges]
+                - is_peptide: composing amino acids or not [N_atoms]
+                - node_type_batch, pocket_pos_batch: Batch indices for graph pooling
+                
+        Returns:
+            Dictionary containing:
+                - pred_node: Predicted node (atom) type logits [N_atoms, num_node_types]
+                - pred_pos: Predicted 3D coordinates [N_atoms, 3]
+                - pred_halfedge: Predicted edge (bond) type logits [N_edges, num_edge_types]
+                - confidence_* (optional): Self-confidence scores for predictions
         """
 
-        # # 1. prepare embedding 
+        # Step 1: Prepare embeddings from noisy inputs
         pos_in = batch['pos_in']
         h_node_in = self.nodetype_embedder(batch['node_in'])
         h_halfedge_in = self.edgetype_embedder(batch['halfedge_in'])
-        # pos_in = batch['node_pos']
-        # h_node_in = self.nodetype_embedder(batch['node_type'])
-        # h_halfedge_in = self.edgetype_embedder(batch['halfedge_type'])
         
-        # add fixed indicator as extra features
+        # Concatenate fixed indicators (task prompt) as additional features
+        # These tell the model which nodes/edges should remain unchanged
         node_extra = torch.stack([batch['fixed_node'], batch['fixed_pos']], dim=1).to(pos_in.dtype)
-        # node_extra = torch.ones_like(node_extra)
         halfedge_extra = torch.stack([batch['fixed_halfedge'], batch['fixed_halfdist']], dim=1).to(pos_in.dtype)
-        # halfedge_extra = torch.ones_like(halfedge_extra)
         h_node_in = torch.cat([h_node_in, node_extra], dim=-1)
         h_halfedge_in = torch.cat([h_halfedge_in, halfedge_extra], dim=-1)
 
-        # break symmetry
+        # Convert half-edges to full bidirectional edges for message passing
         n_halfedges = h_halfedge_in.shape[0]
         halfedge_index = batch['halfedge_index']
         edge_index = torch.cat([halfedge_index, halfedge_index.flip(0)], dim=1)
         h_edge_in = torch.cat([h_halfedge_in, h_halfedge_in], dim=0)
         edge_extra = torch.cat([halfedge_extra, halfedge_extra], dim=0)
         
-        # additonal node features
+        # Add additional node features (e.g., peptide indicator)
         if 'is_peptide' in self.addition_node_features:
             is_peptide = batch['is_peptide'].unsqueeze(-1).to(pos_in.dtype)
             h_node_in = torch.cat([h_node_in, is_peptide], dim=-1)
         
-        # # encode pocket
+        # Step 2: Encode protein pocket as context
         h_pocket = self.pocket_embedder(batch['pocket_atom_feature'])
         h_pocket = self.pocket_encoder(
             h_node=h_pocket,
@@ -125,8 +160,7 @@ class PMAsymDenoiser(Module):
             edge_extra=None,
         )
 
-        # # 2 diffuse to get the updated node embedding and bond embedding
-        # device = h_node_in.device
+        # Step 3: Denoise molecule conditioned on pocket
         h_node, pos_node, h_edge = self.denoiser(
             h_node=h_node_in,
             pos_node=pos_in, 
@@ -135,45 +169,34 @@ class PMAsymDenoiser(Module):
             node_extra=node_extra,
             edge_extra=edge_extra,
             batch_node=batch['node_type_batch'],
-            # pocket
+            # Pocket context
             h_ctx=h_pocket,
             pos_ctx=batch['pocket_pos'],
             batch_ctx=batch['pocket_pos_batch'],
         )
         
+        # Step 4: Decode predictions
         pred_node = self.node_decoder(h_node)
-        pred_halfedge = self.edge_decoder(h_edge[:n_halfedges]+h_edge[n_halfedges:])  # NOTE why not divide by 2?
+        # Average bidirectional edge features before decoding
+        pred_halfedge = self.edge_decoder(h_edge[:n_halfedges] + h_edge[n_halfedges:])
         pred_pos = pos_node
         
+        # Optional: predict self-confidence scores
         additional_outputs = {}
         if 'confidence' in self.add_output:
             pred_node_cfd = self.node_cfd(h_node)
-            pred_pos_cfd = self.pos_cfd(h_node)  # use the node hidden
-            pred_edge_cfd = self.edge_cfd(h_edge[:n_halfedges]+h_edge[n_halfedges:])  # NOTE why not divide by 2?
-            additional_outputs = {'confidence_node': pred_node_cfd, 'confidence_pos': pred_pos_cfd, 'confidence_halfedge': pred_edge_cfd}
-        # elif 'dihedral' in self.add_output:
-        #     sin_out, cos_out = get_dihedral_batch(pred_pos, batch['tor_bonds_anno'], batch['dihedral_pairs_anno'])
-        #     additional_outputs.update({'dih_sin': sin_out, 'dih_cos': cos_out})
-        # # add last emb (temprary hack for pep node emb)
-        # additional_outputs.update({'emb_node': h_node})
+            pred_pos_cfd = self.pos_cfd(h_node)
+            pred_edge_cfd = self.edge_cfd(h_edge[:n_halfedges] + h_edge[n_halfedges:])
+            additional_outputs = {
+                'confidence_node': pred_node_cfd, 
+                'confidence_pos': pred_pos_cfd, 
+                'confidence_halfedge': pred_edge_cfd
+            }
         
-        # if kwargs.get('pos_corr', False):
-        #     sin_in, cos_in = get_dihedral_batch(pos_in, batch['tor_bonds_anno'], batch['dihedral_pairs_anno'])
-        #     pred_pos_corr = correct_pos(
-        #         pos_in=pos_in.clone(), pos_out=pos_node.clone(),
-        #         sin_in=sin_in, cos_in=cos_in,
-        #         sin_out=sin_out, cos_out=cos_out,
-        #         domain_node_index=batch['domain_node_index'],
-        #         domain_center_nodes=batch['domain_center_nodes'],
-        #         tor_bonds_anno=batch['tor_bonds_anno'],
-        #         twisted_nodes_anno=batch['twisted_nodes_anno'],
-        #         dihedral_pairs_anno=batch['dihedral_pairs_anno'],
-        #     )
-        #     additional_outputs.update({'pred_pos_corr': pred_pos_corr})
-
         return {
             'pred_node': pred_node,
             'pred_pos': pred_pos,
             'pred_halfedge': pred_halfedge,
             **additional_outputs,
         }
+

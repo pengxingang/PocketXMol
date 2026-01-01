@@ -14,7 +14,10 @@ import pandas as pd
 from tqdm import tqdm
 from Bio.PDB import PDBParser
 from Bio.PDB import Superimposer
-PATH_DOCKQ = 'XXX'  # dockq path
+
+# DockQ executable path (set to your installation location)
+PATH_DOCKQ = None  # e.g., '/path/to/DockQ/DockQ.py'
+assert PATH_DOCKQ is not None, "Please set the PATH_DOCKQ variable to the DockQ installation path."
 
 BB_ATOMS = ['N', 'CA', 'C', 'O']
 

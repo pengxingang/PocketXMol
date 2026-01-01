@@ -1,52 +1,37 @@
-# from cmath import e
+"""PocketXMol Sampling and Trajectory Management.
+
+This module implements the sampling loop for universal-denoising molecule
+generation. It handles iterative refinement through the reverse diffusion
+process, trajectory saving, and post-processing of generated molecules.
+
+Key functions:
+    - sample_loop3: Main sampling loop for reverse diffusion
+    - seperate_outputs2: Splits batched outputs into individual molecules
+    - get_cfd_traj: Computes trajectory-based confidence scores
+"""
+
+# Standard library imports
+import os
 from copy import deepcopy
 from typing import Optional, Union
-import os
-import torch
+
 import numpy as np
+import torch
 from torch.nn import functional as F
 from tqdm import tqdm
-# from torch_geometric.data import Batch
-# from tqdm.auto import tqdm
-# from sklearn.cluster import DBSCAN, KMeans, OPTICS
 
-# from .common import split_tensor_by_batch, concat_tensors_to_batch
-# from utils.noise import *
-
-ALT_KEYS = {'node':'node_type', 'pos':'node_pos', 'halfedge':'halfedge_type'}
-
-
-# def overwrite_pos_batch(over_cfg, batch, i_repeat, i_batch, batch_size):
-#     """
-#     Overwrite the pos of the batch with the given configuration, not for individual data
-#     """
-#     if over_cfg['strategy'] == 'linking_unfixed':
-#         pos_root = over_cfg['pos_root']
-#         lv = over_cfg['lv']
-#         # determine the sdf dir names
-#         i_start = i_batch * batch_size
-#         i_end = i_start + len(batch)
-#         key_batch = batch['key']
-#         sep_names = [key.split(';')[-1].replace('/', '_sep_') for key in key_batch]
-#         dir_names = [f'{index}-{sep_name}' for index, sep_name in zip(range(i_start, i_end), sep_names)]
-#         sdf_paths = [os.path.join(pos_root, f'lv{lv}', dir_name, f'repeat_{i_repeat}.sdf') for dir_name in dir_names]
-#         # read the sdf
-#         mol_list = [Chem.MolFromMolFile(sdf_path, sanitize=False) for sdf_path in sdf_paths]
-#         conf_list = [mol.GetConformer(0).GetPositions() for mol in mol_list]
-#         new_pos = np.concatenate(conf_list, axis=0)
-        
-#         # overwrite the pos
-#         node_pos = batch['node_pos']
-#         assert node_pos.shape == new_pos.shape, f'node_pos.shape: {node_pos.shape}, new_pos.shape: {new_pos.shape}'
-#         batch['node_pos'] = torch.tensor(new_pos, dtype=node_pos.dtype, device=node_pos.device)
-#         if batch['pocket_center'].shape[0] > 0:
-#             pocket_center = batch['pocket_center']
-#             batch['node_pos'] = batch['node_pos'] - pocket_center[batch['node_type_batch']]
-        
-        
+ALT_KEYS = {'node': 'node_type', 'pos': 'node_pos', 'halfedge': 'halfedge_type'}
 
 
 def add_info_to_dict(data_dict, data, mode):
+    """Add data from different stages to dictionary for trajectory tracking.
+
+    Args:
+        data_dict: Dictionary to store trajectory data.
+        data: Batch data containing molecular information.
+        mode: Stage indicator - 'in' (input), 'out' (adapted output),
+            'gt' (ground truth), 'raw_out' (raw model output).
+    """
     assert mode in ['in', 'out', 'gt', 'raw_out'], f'Unknown mode: {mode}'
     for key in ['node', 'pos', 'halfedge']:
         if mode == 'in':
@@ -58,45 +43,68 @@ def add_info_to_dict(data_dict, data, mode):
                 this = data['gt_' + ALT_KEYS[key]]
             else:
                 continue
-        else: # raw_out
+        else:  # raw_out
             if key != 'pos':
                 this = data['pred_' + key].argmax(dim=-1)
             else:
                 this = data['pred_' + key]
         data_dict[key].append(this.detach().cpu())
 
+
 def sample_loop3(batch, model, noiser, device=None, is_ar='', off_tqdm=False):
-    # # save initial batch and gt mol seperations
+    """
+    Main sampling loop for reverse diffusion process.
+    
+    Iteratively denoises a molecular graph from pure noise to a clean structure.
+    Supports both standard denoising and auto-regressive (AR) generation modes.
+    
+    Args:
+        batch: Initial batch data with noisy molecule
+        model: Trained denoiser model (PMAsymDenoiser)
+        noiser: Noiser defining the noise-adding process
+        device: Computation device (cuda/cpu)
+        is_ar: Auto-regressive mode - '' (standard), 'ar', or 'ar2'
+        off_tqdm: Whether to disable progress bar
+        
+    Returns:
+        Tuple of (final_batch, outputs, trajectories):
+            - final_batch: Clean generated molecule
+            - outputs: Model predictions and confidence scores
+            - trajectories: Complete generation trajectory for analysis
+    """
+    # Initialize trajectory tracking for ground truth and parts
     traj_dict = {'node': [], 'pos': [], 'halfedge': []}
     cfd_traj = []
     mol_parts = get_mol_parts_linking(batch, device=device)
     for data_mol in [batch] + mol_parts:
         add_info_to_dict(traj_dict, data_mol, 'gt')
 
-    # # sample loop
+    # Initialize dictionaries for input, output, and raw predictions
     in_dict = {'node': [], 'pos': [], 'halfedge': []}
     out_dict = {'node': [], 'pos': [], 'halfedge': []}
     raw_dict = {'node': [], 'pos': [], 'halfedge': []}
     
     step_ar = 0
     while True:
-        for step in tqdm(noiser.steps_loop(add_last=False), desc='Sampling steps', total=noiser.num_steps, disable=off_tqdm):
+        # Main denoising loop
+        for step in tqdm(noiser.steps_loop(add_last=False), desc='Sampling steps', 
+                        total=noiser.num_steps, disable=off_tqdm):
             with torch.no_grad():
-                # # add noise as the input of the step
+                # Add noise for current timestep
                 batch = noiser(batch, step)
                 add_info_to_dict(in_dict, batch, 'in')
                 add_info_to_dict(traj_dict, batch, 'in')
                 
-                # # denoise and correct output in output space
+                # Denoise and update batch for next step
                 outputs = model(batch) 
                 batch.update({'step': step})
-                batch = noiser.outputs2batch(batch, outputs)  # correct the denoised, as the next step start mol
+                batch = noiser.outputs2batch(batch, outputs)  # M-Projector (what a strange name, I (xingang) do not like it)
                 add_info_to_dict(out_dict, batch, 'out')
                 add_info_to_dict(traj_dict, batch, 'out')
                 add_info_to_dict(raw_dict, outputs, 'raw_out')
                 cfd_traj.append(outputs['confidence_pos'].detach().flatten())
 
-
+        # Handle auto-regressive generation (if enabled)
         if is_ar.startswith('ar'):
             if is_ar == 'ar':
                 batch = noiser.outputs2batch_ar(batch, outputs, step_ar, cfd_traj)
@@ -111,12 +119,12 @@ def sample_loop3(batch, model, noiser, device=None, is_ar='', off_tqdm=False):
         else:
             break
     
-    # concat traj
+    # Stack trajectories into arrays
     all_trajs, in_trajs, out_trajs = {}, {}, {}
     raw_trajs = {}
     try:
         for key in traj_dict.keys():
-            all_trajs[key] = np.stack([d.numpy() for d in traj_dict[key]], axis=0)  # torch is slower
+            all_trajs[key] = np.stack([d.numpy() for d in traj_dict[key]], axis=0)  # torch is slower here
             in_trajs[key] = np.stack([d.numpy() for d in in_dict[key]], axis=0)
             out_trajs[key] = np.stack([d.numpy() for d in out_dict[key]], axis=0)
             raw_trajs[key] = np.stack([d.numpy() for d in raw_dict[key]], axis=0)
@@ -127,10 +135,10 @@ def sample_loop3(batch, model, noiser, device=None, is_ar='', off_tqdm=False):
             in_trajs[key] = pad_and_stack(in_dict[key], dim=0)
             out_trajs[key] = pad_and_stack(out_dict[key], dim=0)
             raw_trajs[key] = pad_and_stack(raw_dict[key], dim=0)
+    
     trajs = {'all': all_trajs, 'in': in_trajs, 'out': out_trajs, 'raw': raw_trajs}
     outputs['confidence_pos_traj'] = torch.stack(cfd_traj, dim=-1)
     return batch, outputs, trajs
-    # return batch, outputs, {}
 
 def pad_and_stack(tensor_list, dim):
     size_list = [tensor.size(0) for tensor in tensor_list]
@@ -172,7 +180,6 @@ def seperate_outputs2(batch, outputs, trajs, off_tqdm=False):
         })
     
     # # model outputs
-    # outputs_list = [] # TODO. not used yet
     node_sizes = torch.bincount(batch['node_type_batch']).tolist()
     halfedge_sizes = torch.bincount(batch['halfedge_type_batch']).tolist()
     outputs_dict = {}
@@ -183,8 +190,7 @@ def seperate_outputs2(batch, outputs, trajs, off_tqdm=False):
             outputs_dict[key] = torch.split(value, halfedge_sizes)
         elif len(value) == len(batch):
             outputs_dict[key] = value
-    # outputs_dict = {key:torch.split(value, (halfedge_sizes if 'edge' in key else node_sizes))
-    #                 for key, value in outputs.items()}
+
     outputs_list = []
     for i_mol in range(num_graphs):
         output = {key:value[i_mol].cpu() for key, value in outputs_dict.items()}

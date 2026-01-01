@@ -321,19 +321,6 @@ Configuration files include:
 - `prior_fix_terminal_residue.yml`: dock with fixed both terminal residue atom coordinates
 - `prior_fix_backbone.yml`: dock with fixed backbone atom coordinates
 
-<!-- TODO: remove foldx. set same as small molecule docking -->
-
-<!-- To apply FoldX to rank the docked peptide poses, use the following commands to prepare the FoldX input files and run FoldX:
-```python
-python evaluate/prepare_cpx.py --result_root outputs_test/dock_pepbdb \
-            --exp_name base_pxm
-python evaluate/foldx/foldx_pipeline.py --result_root outputs_test/dock_pepbdb \
-            --exp_name base_pxm  --num_workers  126
-```
-The parameter `result_root` is the directory containing the sampling experiments (equal to the parameter `outdir` of the sampling command).
-The parameter `exp_name` is the name of the sampling experiment directory (looks like `base_pxm_20240531_225401`). If there is only one experiment with the name starting with the `exp_name`, the appended timestamp can be omitted (i.e., set as `base_pxm`). -->
-
-
 
 
 ## Molecular conformation generation

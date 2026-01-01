@@ -8,9 +8,7 @@ from easydict import EasyDict
 from tqdm import tqdm
 import torch
 from torch_geometric.utils import subgraph, bipartite_subgraph, to_undirected
-# from torch.nn import Module
-# from torch.nn import functional as F
-# from models.transition import ContigousTransition, GeneralCategoricalTransition
+
 from models.diffusion import *
 
 from utils.data import Mol3DData

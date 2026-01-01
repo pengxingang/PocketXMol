@@ -1,29 +1,64 @@
-import numpy as np
+"""PocketXMol Molecule Reconstruction Module.
+
+This module handles reconstruction of 3D molecular structures from generated
+graph representations. It converts predicted atom types, positions, and bonds
+into valid RDKit molecules or PDB structures.
+
+Key functions:
+    - reconstruct_from_generated_with_edges: Main reconstruction for small molecules
+    - reconstruct_pdb_from_generated_fold: Reconstruction for peptides to PDB format
+    - set_rdmol_positions: Update RDKit molecule coordinates
+    - add_bond_from_obmol: Bond order assignment using OpenBabel
+
+The reconstruction process:
+    1. Create base molecule from atom types and connectivity
+    2. Set 3D coordinates
+    3. Assign bond orders (using template or OpenBabel)
+    4. Sanitize and validate final structure
+"""
+
+# Standard library imports
 import itertools
-from copy import deepcopy
+import os
 import re
 import tempfile
+from copy import deepcopy
 from io import StringIO
-import os
 
-
-from Bio.PDB import PDBParser, PDBIO, Structure, Model, Chain
-from rdkit.Chem import AllChem as Chem
-from rdkit import Geometry
+# Third-party imports
+import numpy as np
+from Bio.PDB import Chain, Model, PDBParser, PDBIO, Structure
 from openbabel import openbabel as ob
-# from openbabel import pybel
-from scipy.spatial.distance import pdist
-from scipy.spatial.distance import squareform
-# from .edm_bond import predict_bonds
-# from torch.jit import Error
+from rdkit import Geometry
+from rdkit.Chem import AllChem as Chem
+from scipy.spatial.distance import pdist, squareform
 
+# Local imports
 from process.process_torsional_info import get_mol_from_data
-from utils.misc import time_limit, TimeoutException
-# from .protein_ligand import ATOM_FAMILIES_ID
+from utils.misc import TimeoutException, time_limit
 
-
+# Module-level constants
 ptable = Chem.GetPeriodicTable()
+
 def reconstruct_pdb_from_generated_fold(mol_info, check_atom=True, gt_path=''):
+    """
+    Reconstruct peptide PDB structure from generated for structure prediction tasks.
+    
+    Takes generated 3D coordinates and updates a ground truth PDB template.
+    Used for peptide design and conformation generation tasks.
+    
+    Args:
+        mol_info: Dictionary containing:
+            - atom_pos: Generated 3D coordinates [N, 3]
+            - element: Atomic numbers [N]
+            - task: Task type ('conf' or 'dock')
+            - db, data_id: Dataset identifiers for ground truth lookup
+        check_atom: Whether to verify atom types match ground truth
+        gt_path: Optional path to ground truth PDB file
+        
+    Returns:
+        PDB structure object with updated coordinates
+    """
     assert mol_info['task'] in ['conf', 'dock'], 'this func only recon pos'
     parser = PDBParser(QUIET=True)
 

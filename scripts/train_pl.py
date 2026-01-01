@@ -1,37 +1,67 @@
-import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = '5, 6'
-# os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-import shutil
-import sys
+"""
+PocketXMol - Training Script using PyTorch Lightning
+
+This script implements distributed training for PocketXMol using PyTorch Lightning.
+It handles multi-task learning across different molecule generation objectives 
+(docking, SBDD, peptide design, etc.) with automatic batch reduction for OOM handling.
+
+Usage:
+    python scripts/train_pl.py \
+        --config configs/train/train_pxm.yml \
+        --num_gpus 8 \
+        --logdir lightning_logs_tasked
+
+Key features:
+    - Multi-GPU distributed training (DDP strategy)
+    - Multi-task learning with weighted sampling
+    - Automatic batch size reduction on OOM
+    - Gradient clipping and warmup scheduling
+    - Model checkpointing and TensorBoard logging
+"""
+
+# Standard library imports
 import argparse
 import gc
-
+import os
+import shutil
+import sys
 from typing import Any, Callable, Optional, Union
-from pytorch_lightning.core.optimizer import LightningOptimizer
-from pytorch_lightning.utilities.types import LRSchedulerTypeUnion
-import torch
-# from torch.utils.data import DataLoader
+
+# Third-party imports
 import pytorch_lightning as pl
-from pytorch_lightning.utilities import grad_norm
+import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.core.optimizer import LightningOptimizer
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.utilities import grad_norm
+from pytorch_lightning.utilities.types import LRSchedulerTypeUnion
 from torch import Tensor
 from torch.optim.optimizer import Optimizer
 from torch_geometric.data import Batch
 from torch_geometric.loader import DataLoader
-torch.set_float32_matmul_precision('medium')
 
+# Local imports
 sys.path.append('.')
-from models.maskfill import PMAsymDenoiser
 from models.loss import get_loss_func
+from models.maskfill import PMAsymDenoiser
 from utils.dataset import ForeverTaskDataset
-from utils.transforms import FeaturizeMol, Compose, get_transforms, FeaturizePocket
 from utils.misc import *
-from utils.train import get_optimizer, get_scheduler, GradualWarmupScheduler
 from utils.sample_noise import get_sample_noiser
+from utils.train import GradualWarmupScheduler, get_optimizer, get_scheduler
+from utils.transforms import Compose, FeaturizeMol, FeaturizePocket, get_transforms
+
+torch.set_float32_matmul_precision('medium')
 
 
 def copy_py_files(src_dir, dst_dir, base=False):
+    """
+    Recursively copy Python source files to backup directory.
+    
+    Args:
+        src_dir: Source directory
+        dst_dir: Destination directory
+        base: If True, only copy selected subdirectories (scripts, models, etc.)
+    """
     os.makedirs(dst_dir, exist_ok=True)
     for item in os.listdir(src_dir):
         # Get the absolute path of the item
@@ -46,12 +76,27 @@ def copy_py_files(src_dir, dst_dir, base=False):
 
 
 class DataModule(pl.LightningDataModule):
-    def __init__(self, config, ):
+    """
+    PyTorch Lightning DataModule for PocketXMol training.
+    
+    Handles dataset loading, transformation pipeline setup, and data loading
+    for multi-task training across different molecule generation objectives.
+    
+    Args:
+        config: Training configuration with data and transform specifications
+    """
+    
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        # self.multi_node = args.multi_node
         
     def get_featurizers(self):
+        """
+        Get featurizer transforms for molecules and protein pockets.
+        
+        Returns:
+            List of featurizer transforms (pocket featurizer if present, then mol featurizer)
+        """
         featurizer = FeaturizeMol(self.config.transforms.featurizer)
         if 'featurizer_pocket' in self.config.transforms:
             feat_pocket = FeaturizePocket(self.config.transforms.featurizer_pocket)

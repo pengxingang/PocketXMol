@@ -1,11 +1,21 @@
+"""Evaluation Utilities for PocketXMol
+
+Utility functions for evaluating generated structures, including DockQ scoring
+and PDB structure manipulation.
+
+Note: PATH_DOCKQ should be set to your DockQ installation path for peptide evaluation.
+      Download DockQ from: https://github.com/bjornwallner/DockQ
+"""
+
 import os
 import subprocess
 from Bio.PDB import PDBParser, PDBIO, Structure, Chain
 import tempfile
 from copy import deepcopy
 
-PATH_DOCKQ =  'XXX'  # dockq path
-
+# DockQ executable path (set to your installation location)
+PATH_DOCKQ = None  # e.g., '/path/to/DockQ/DockQ.py'
+assert PATH_DOCKQ is not None, "Please set PATH_DOCKQ to your DockQ installation path."
 
 def combine_chains(pdb_file_path, combined_chain_id='R', bias=200, save_path=None):
     # Create a structure object from the PDB file

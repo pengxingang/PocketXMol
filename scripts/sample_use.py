@@ -1,34 +1,68 @@
-import os
-import sys
-sys.path.append('.')
-import shutil
+"""PocketXMol User-Friendly Sampling Script.
+
+This script provides the main entry point for generating molecules using trained
+PocketXMol models on user-provided protein and ligand data.
+
+Usage:
+    $ python scripts/sample_use.py \
+        --config_task configs/sample/examples/dock_smallmol.yml \
+        --config_model configs/sample/pxm.yml \
+        --outdir outputs_examples \
+        --device cuda:0
+
+The script:
+    1. Loads model checkpoint and configurations
+    2. Processes input protein and ligand files
+    3. Runs iterative denoising to generate molecules
+    4. Saves results as SDF files with confidence scores
+"""
+
+# Standard library imports
 import argparse
 import gc
+import os
+import shutil
+import sys
+from itertools import cycle
+
+# Third-party imports
+import numpy as np
 import torch
 import torch.utils.tensorboard
-import numpy as np
-from itertools import cycle
+from Bio import PDB
+from Bio.SeqUtils import seq1
 from easydict import EasyDict
-from tqdm.auto import tqdm
 from rdkit import Chem
 from torch_geometric.loader import DataLoader
-from Bio.SeqUtils import seq1
-from Bio import PDB
+from tqdm.auto import tqdm
 
-
-from scripts.train_pl import DataModule
+# Local imports
+sys.path.append('.')
 from models.maskfill import PMAsymDenoiser
-from models.sample import seperate_outputs2, sample_loop3, get_cfd_traj
-from utils.transforms import *
+from models.sample import get_cfd_traj, sample_loop3, seperate_outputs2
+from process.utils_process import (
+    add_pep_bb_data,
+    extract_pocket,
+    get_input_from_file,
+    get_peptide_info,
+    make_dummy_mol_with_coordinate,
+)
+from scripts.train_pl import DataModule
+from utils.dataset import UseDataset
 from utils.misc import *
 from utils.reconstruct import *
-from utils.dataset import UseDataset
 from utils.sample_noise import get_sample_noiser
-from process.utils_process import extract_pocket, add_pep_bb_data, get_peptide_info, get_input_from_file,\
-    make_dummy_mol_with_coordinate
+from utils.transforms import *
 
 
-def print_pool_status(pool, logger, is_pep=False):
+def print_pool_status(pool, logger, is_pep: bool = False) -> None:
+    """Print statistics of generation results.
+
+    Args:
+        pool: Result pool containing successful and failed generations.
+        logger: Logger instance.
+        is_pep: Whether generating peptides (affects output format).
+    """
     if not is_pep:
         logger.info('[Pool] Succ/Incomp/Bad: %d/%d/%d' % (
             len(pool.succ), len(pool.incomp), len(pool.bad)
@@ -44,36 +78,77 @@ def get_input_data(protein_path,
                    is_pep=False,
                    pocket_args={},
                    pocmol_args={}):
+    """
+    Process input protein and ligand files for generation.
+    
+    Extracts protein pocket around ligand/reference and prepares molecular data.
+    
+    Args:
+        protein_path: Path to protein PDB file
+        input_ligand: Ligand specification (SDF/PDB path or special format like 'pepseq_XXX')
+        is_pep: Whether processing peptide
+        pocket_args: Pocket extraction parameters (radius, ref_ligand_path, etc.)
+        pocmol_args: Additional molecule processing parameters
+        
+    Returns:
+        Tuple of (pocmol_data, pocket_pdb, mol):
+            - pocmol_data: Processed pocket-molecule data dict
+            - pocket_pdb: Extracted pocket PDB file object
+            - mol: RDKit molecule object (or None)
+    """
+    """
+    Process input protein and ligand files for generation.
+    
+    Extracts protein pocket around ligand/reference and prepares molecular data.
+    
+    Args:
+        protein_path: Path to protein PDB file
+        input_ligand: Ligand specification (SDF/PDB path or special format like 'pepseq_XXX')
+        is_pep: Whether processing peptide
+        pocket_args: Pocket extraction parameters (radius, ref_ligand_path, etc.)
+        pocmol_args: Additional molecule processing parameters
+        
+    Returns:
+        Tuple of (pocmol_data, pocket_pdb, mol):
+            - pocmol_data: Processed pocket-molecule data dict
+            - pocket_pdb: Extracted pocket PDB file object
+            - mol: RDKit molecule object (or None)
+    """
 
-
-    # # get pocket
+    # Determine pocket extraction reference
     ref_ligand = pocket_args.get('ref_ligand_path', None)
     pocket_coord = pocket_args.get('pocket_coord', None)
     if ref_ligand is not None:
-        pass  # use ref_ligand_path to define pocket
+        pass  # use provided ref_ligand_path
     elif pocket_coord is not None:
         ref_ligand = make_dummy_mol_with_coordinate(pocket_coord)
-    else: # use input_ligand paths
-        print('Neither ref_ligand nor pocket_coord is provided for pocket extraction. Use input_ligand as reference.')
-        assert input_ligand is not None and (input_ligand.endswith('.sdf') or input_ligand.endswith('.pdb')), 'Only SDF/PDB input_ligand can be used for pocket extraction.'
+    else:  # use input_ligand as reference
+        print('Neither ref_ligand nor pocket_coord provided for pocket extraction. Using input_ligand as reference.')
+        assert input_ligand is not None and (input_ligand.endswith('.sdf') or input_ligand.endswith('.pdb')), \
+            'Only SDF/PDB input_ligand can be used for pocket extraction.'
         ref_ligand = input_ligand
+    
+    # Extract pocket from protein
     pocket_pdb = extract_pocket(protein_path, ref_ligand, 
                             radius=pocket_args.get('radius', 10),
                             criterion=pocket_args.get('criterion', 'center_of_mass'))
-    #process the input ligand and protein pocket
+    
+    # Process input ligand and pocket
     pocmol_data, mol = get_input_from_file(input_ligand, pocket_pdb, return_mol=True, **pocmol_args)
     
-    # add peptide info
-    if is_pep: # pep tasks
-        if input_ligand.endswith('.pdb'):  # pep docking given pdb file
+    # Add peptide-specific information
+    if is_pep:
+        if input_ligand.endswith('.pdb'):  # Peptide docking from PDB
             pep_info = get_peptide_info(input_ligand)
-            # in case both sdf and pdb are provided, check consistency. (Might not exist in practice?)
-            assert torch.isclose(pocmol_data['pos_all_confs'][0], pep_info['peptide_pos'], 1e-2).all(), 'mol and pep atoms may not match'
-        elif input_ligand.startswith('peplen_'):  # pepdesign
+            # Verify consistency (sanity check)
+            assert torch.isclose(pocmol_data['pos_all_confs'][0], pep_info['peptide_pos'], 1e-2).all(), \
+                'Molecule and peptide atoms may not match'
+        elif input_ligand.startswith('peplen_'):  # Peptide design
             pep_info = add_pep_bb_data(pocmol_data)
-        else:  # pepseq_{xxx}. dock pep: no need to extract any pep info
+        else:  # pepseq_{xxx} - peptide docking from sequence
             pep_info = {}
         pocmol_data.update(pep_info)
+    
     return pocmol_data, pocket_pdb, mol
 
 

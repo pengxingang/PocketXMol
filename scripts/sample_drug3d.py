@@ -10,7 +10,6 @@ import torch
 import torch.utils.tensorboard
 import numpy as np
 from itertools import cycle
-# from torch_geometric.data import Batch
 from easydict import EasyDict
 from tqdm.auto import tqdm
 from rdkit import Chem

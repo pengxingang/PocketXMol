@@ -11,9 +11,7 @@ from scipy.optimize import linear_sum_assignment
 
 from torch_geometric.data import Batch
 from torch_geometric.nn import radius
-# from torch.nn import Module
-# from torch.nn import functional as F
-# from models.transition import ContigousTransition, GeneralCategoricalTransition
+
 from models.diffusion import *
 from models.corrector import correct_pos_batch, kabsch_flatten, correct_pos_batch_no_tor, grad_len_to_pos, correct_pos_by_fixed_dist_batch
 from utils.data import Mol3DData

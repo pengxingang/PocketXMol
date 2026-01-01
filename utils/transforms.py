@@ -1,75 +1,133 @@
-# import copy
-# import os
-from itertools import product
-from torch_scatter import scatter_min
+"""
+PocketXMol - Data Transformation Pipeline
+
+This module implements the complete data transformation pipeline for PocketXMol.
+Transforms convert raw molecular and protein data into graph representations suitable
+for training and sampling with diffusion models.
+
+Key transform classes (registered via @register_transforms decorator):
+    - FeaturizeMol: Converts molecules to graph format with atom/bond features
+    - FeaturizePocket: Converts protein pockets to graph format
+    - **Transform: Task-specific transforms for different generation tasks
+    - CustomTransform: Flexible transform for custom generation tasks
+
+Configuration settings:
+    - CONF_SETTINGS: Conformation flexibility modes
+    - MASKFILL_SETTINGS: Fragment decomposition and generation order
+    - PEPDESIGN_SETTINGS: Peptide design modes (full/side-chain/packing)
+
+Usage:
+    Transforms are composed into a pipeline and applied sequentially:
+    ```python
+    transforms = Compose([featurizer_pocket, featurizer_mol, task_transform, noiser])
+    data = transforms(raw_data)
+    ```
+"""
+
+# Standard library imports
 import sys
-sys.path.append('.')
+from itertools import product
+
+# Third-party imports
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
-# from rdkit.Chem.AllChem import 
 from torch_geometric.nn.pool import knn_graph
-from torch_geometric.utils import subgraph, bipartite_subgraph, to_undirected, sort_edge_index
-from torch_geometric.transforms import Compose  # imported by train.py
+from torch_geometric.transforms import Compose
+from torch_geometric.utils import (
+    bipartite_subgraph,
+    sort_edge_index,
+    subgraph,
+    to_undirected,
+)
+from torch_scatter import scatter_min
 
+# Local imports
+sys.path.append('.')
 from models.transition import *
-
-from utils.train_noise import get_vector, get_vector_list, combine_vectors_indexed
+from process.utils_process import process_raw
 from utils.data import Mol3DData, PocketMolData
 from utils.dataset import *
 from utils.misc import *
-from process.utils_process import process_raw
-# from utils.train import inf_iterator
-# from utils.protein_ligand import ATOM_FAMILIES
-# from utils.reconstruct import reconstruct_from_generated_with_edges
+from utils.train_noise import (
+    combine_vectors_indexed,
+    get_vector,
+    get_vector_list,
+)
 
-
+# Configuration constants for different generation modes
 CONF_SETTINGS = ['free', 'flexible', 'torsional', 'rigid']
+
 MASKFILL_SETTINGS = {
-    'decomposition': ['brics', 'mmpa', 'atom'],
-    'order': ['tree', 'inv_tree', 'random'],
-    'part1_pert': ['fixed', 'free', 'small', 'rigid', 'flexible'],
-    'known_anchor': ['all', 'partial', 'none']
+    'decomposition': ['brics', 'mmpa', 'atom'],  # Fragment decomposition strategies
+    'order': ['tree', 'inv_tree', 'random'],      # Generation order
+    'part1_pert': ['fixed', 'free', 'small', 'rigid', 'flexible'],  # Reference fragment perturbation
+    'known_anchor': ['all', 'partial', 'none']    # Anchor atom knowledge
 }
 PEPDESIGN_SETTINGS = {
-    'mode': ['full', 'sc', 'packing']
+    'mode': ['full', 'sc', 'packing']  # full=backbone+sidechain, sc=sidechain, packing=sc position only
 }
 
+# Transform registry
+_TRAIN_DICT = {}
 
-TRAIN_DICT = {} 
-def register_transforms(name):
+
+def register_transforms(name: str):
+    """Decorator to register transform classes by name.
+    
+    Args:
+        name: Name to register the transform class under.
+        
+    Returns:
+        Decorator function that registers the class.
+    """
     def decorator(cls):
-        TRAIN_DICT[name] = cls
+        _TRAIN_DICT[name] = cls
         return cls
     return decorator
 
+
 def get_transforms(config, *args, **kwargs):
+    """Factory function to instantiate transforms from config.
+    
+    Args:
+        config: Configuration object with 'name' attribute.
+        *args: Additional positional arguments.
+        **kwargs: Additional keyword arguments.
+        
+    Returns:
+        Instantiated transform object.
+    """
     name = config.name
-    return TRAIN_DICT[name](config, *args, **kwargs)
+    return _TRAIN_DICT[name](config, *args, **kwargs)
 
 
 def halfedge_index_to_1d(halfedge_index, num_nodes):
+    """Convert half-edge indices to 1D edge IDs.
+    
+    Args:
+        halfedge_index: Edge indices tensor of shape (2, num_edges).
+        num_nodes: Total number of nodes in the graph.
+        
+    Returns:
+        1D edge IDs tensor.
+        
+    Raises:
+        AssertionError: If halfedge_index[0] >= halfedge_index[1].
     """
-    halfedge_index: (2, num_edges)
-    num_nodes: int
-    """
-    assert (halfedge_index[0] < halfedge_index[1]).all(), 'halfedge_index[0] must be smaller than halfedge_index[1]'
-    id_edge = ((2 * num_nodes - halfedge_index[0] - 1) * halfedge_index[0] // 2
-               + halfedge_index[1] - halfedge_index[0] - 1)
+    assert (halfedge_index[0] < halfedge_index[1]).all(), (
+        'halfedge_index[0] must be smaller than halfedge_index[1]'
+    )
+    id_edge = (
+        (2 * num_nodes - halfedge_index[0] - 1) * halfedge_index[0] // 2
+        + halfedge_index[1] - halfedge_index[0] - 1
+    )
     return id_edge
 
 def add_rdkit_conf(data=None, mol=None):
     if mol is None:
-        # reconstruct rdmol from data
-        # mol_info = {
-        #     'atom_pos': data.node_pos,
-        #     'element': data.element,
-        #     'bond_index': data.bond_index,
-        #     'bond_type': data.bond_type
-        # }
-        # mol = reconstruct_from_generated_with_edges(mol_info)  # not exactly same as before. need to be fixed
         path = os.path.join('data', data.db, 'mols', data.data_id + '.sdf')
         mol = Chem.MolFromMolFile(path)
     else:
@@ -141,26 +199,6 @@ class CutPeptide(object):
         return data
 
 
-# @register_transforms('make_fake_data')
-# class MakeFakeData(object):
-#     def __init__(self, config, *args, **kwargs) -> None:
-#         self.config = config
-#         self.mol_type = config['mol_type']
-#         assert self.mol_type in ['mol', 'peptide'], 'mol_type must be mol or peptide'
-        
-#         self.bb_names = ['N', 'CA', 'C', 'O']
-    
-#     def __call__(self, data: Mol3DData):
-#         # make mol size
-#         if self.mol_type == 'peptide':
-#             # determine size
-#             size = self.config.size
-#             n_res = np.random.choice(size.values, weights=size.weights)
-#             n_bb_atoms = 4 * n_res
-#             # make fake mol
-#             smiles = 
-            
-        
 @register_transforms('overwrite_start_pos')  # for dock flex. used _mol_start.sdf provided by posebuster. but not really necessary
 class OverwriteStartPos(object):
     def __init__(self, config, *args, **kwargs):
@@ -1016,12 +1054,11 @@ class ConfTransform:
             data.update({
                 'n_domain': torch.tensor(0, dtype=torch.long),
                 'domain_node_index': torch.empty([2, 0], dtype=torch.long),
-                # 'domain_center_nodes': torch.empty([0, 3], dtype=torch.long),#TODO: remove later
                 'tor_bonds_anno': torch.empty([0, 3], dtype=torch.long),
                 'twisted_nodes_anno': torch.empty([0, 2], dtype=torch.long),
                 'dihedral_pairs_anno': torch.empty([0, 3], dtype=torch.long)
             })
-            return data #! can use it for post-processing, even in free mode
+            return data
         
         # # rigid domain
         # assert setting in ['flexible', 'torsional', 'rigid']

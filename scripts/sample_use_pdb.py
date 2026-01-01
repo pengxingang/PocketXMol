@@ -1,7 +1,5 @@
 from copy import deepcopy
 import os
-
-# os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 import sys
 sys.path.append('.')
 import shutil
@@ -11,7 +9,6 @@ import torch
 import torch.utils.tensorboard
 import numpy as np
 from itertools import cycle
-# from torch_geometric.data import Batch
 from easydict import EasyDict
 from tqdm.auto import tqdm
 from rdkit import Chem
