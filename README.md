@@ -56,7 +56,7 @@ pip install torch_geometric
 pip install torch_scatter torch_sparse torch_cluster -f https://data.pyg.org/whl/torch-2.6.0+cu126.html
 pip install biopython==1.83 rdkit==2023.9.3 peptidebuilder==1.1.0
 pip install openbabel==3.1.1.1  # or, conda install -c conda-forge openbabel -y
-pip install lmdb easydict==1.9 numpy==1.24 pandas==1.5.2
+pip install lmdb easydict==1.9 numpy==1.24 pandas==1.5.2 scipy==1.10.1
 pip install tensorboard
 ```
 
@@ -137,10 +137,21 @@ The configuration files are in `configs/sample/examples`, including:
     - `dock_pep_fix_some.yml`: dock, with fixed coordinates of some atoms
     - `dock_pep_know_some.yml`: dock, with constrained coordinates of some atoms
 - Small molecule design
-    - `sbdd.yml`: design drug-like molecules for protein pocket
-    - `sbdd_simple.yml`: design drug-like molecules for protein pocket (no refinement rounds)
-    - `growing_unfixed_frag.yml`: fragment growing with unfixed fragment pose, i.e., design small molecules containing a specified fragment graph for protein pocket
-    - `growing_fixed_frag.yml`: fragment growing with fixed fragment pose, i.e., design small molecules containing a specified fragment with fixed pose for protein pocket
+    - SBDD (*de novo* small molecule design for protein pocket): 
+        - `sbdd.yml`: design drug-like molecules for protein pocket
+        - `sbdd_simple.yml`: design drug-like molecules for protein pocket (no refinement rounds)
+    - Fragment linking/growing
+        - `linking_fixed_frags.yml`: fragment linking with fixed fragment poses
+        - `linking_fixed_frags_connecting.yml`: fragment linking with fixed fragment poses and specified connecting atoms of fragments
+        - `linking_unfixed_frags_unknown.yml`: fragment linking without knowing the fragment poses
+        - `linking_unfixed_frags_frominput.yml`: fragment linking, using the input fragment poses as the initial poses
+        - `linking_unfixed_frags_approx.yml`: fragment linking, using the input fragment poses as the approximate poses (unfixed, allowing movement)
+        - `linking_redesign_frags.yml`: fragment linking, allowing the fragments to be slightly redesigned (some atom types can be changed)
+        - `growing_fixed_frag.yml`: fragment growing with fixed fragment pose, i.e., design small molecules containing a specified fragment with fixed pose for protein pocket
+        - `growing_unfixed_frag_unknown.yml`: fragment growing with unfixed fragment pose, i.e., design small molecules containing a specified fragment graph for protein pocket
+    - Molecular optimization
+        - `opt_mol.yml`: optimize the input small molecules for protein pocket
+        - `opt_partial.yml`: optimize the specific fragments of the input molecules for protein pocket
 - Peptide design
     - `pepdesign.yml`: design peptides for protein pocket
 - Design with customized settings:
@@ -156,7 +167,6 @@ The configuration files are in `configs/sample/examples`, including:
         - `unfixed_CCOOH_from_inputs`: the setting is the same as `unfixed_CCOOH`, but the initial pose of the -CCOOH group are sampled based on the input peptide. 
         This align with our intuition that the -CCOOH group in the designed peptide should interact with the protein in a similar way as the input one.
 
-More examples are on the way.
 
 ## Confidence scores for sampled molecules
 
@@ -203,11 +213,17 @@ In most cases, you only need to find a task template configuration file and modi
     - `featurizer_pocket`:
         - `center`: coordinate space center for denoising. It influences sampling atom coordinates from the Gaussian noise at the first step. If not set, it will be automatically defined as the average of pocket atom coordinates (You can also use `featurizer/mol_as_pocket_center` to specify the pocket center). This is useful when you have prior knowledge of space for generation. For example, for linker design, you can set the center as the midpoint of the two fragments to be linked.
     - `featurizer`
-        - `mol_as_pocket_center`: bool, use the center coordinates of the ligand as the space center. If set to `True`, the parameter `data/pocket_args/input_ligand` should be SDF/PDB file. (You can also use `featurizer_pocket/center` to specify the pocket center)
+        - `mol_as_pocket_center`: bool, use the center coordinates of the ligand as the space center. If set to `True`, the parameter `data/pocket_args/input_ligand` should be SDF/PDB file. (You can also use `featurizer_pocket/center` to specify the pocket center) If you are generating around your input ligand, this option is recommended (e.g., in cases of fragment-based design).
     - `variable_mol_size`: distributions of the number of atoms for small-molecule designing tasks. It will automatically add or remove atoms from the input ligand. Remember to set its `not_remove` parameter if you want to exclude some atoms from being removed (see example usage in `growing_fixed_frag.yml` and `growing_unfixed_frag.yml`).
     - `variable_sc_size`: distributions of number of side-chain atoms for peptide designing. The default value should work well.
-- `task`: the task and its specific mode.
-- `noise`: the task nosie parameters.
+- `task`: the task and its specific mode. Here, we simply introduce the `maskfill` task. This task is very general and is directly used in many fragment-based tasks (**fragment linking/growing, partial optimizaiton**). The logic of it is to partition the molecules into two parts: `part1` and `part2`.
+    - `part1` is usually the known part, where we completely fix it or only predict the atom coordinates (sometimes you can re-design it, as in the example `linking_redesign_frags.yml`).
+    - `part2` is usually the unknown part, where we want to design it. Its behavior is like the *de novo* design.
+    - The specification of the two parts is in `task.transform.preset_partition`:
+        - you can set: either `grouped_node_p1` or `node_p2` to define the atom indices of `part1` or `part2`. The atom indices are 0-based. Note that you only need to define one of them, and the other part will be automatically determined.
+        - Note that `grouped_node_p1` is a list of lists, where each sub-list contains the atom indices of a fragment in `part1`, while `node_p2` is a flat list of atom indices in `part2`.
+        - Set `grouped_anchor_p1` to specify the allowed connecting atoms for each fragment. Also be the list of lists.
+- `noise`: the task nosie parameters. In most cases, the default settings should work well. You can refer to the noise settings in the training configuration file (`configs/train/train_pxm_reduced.yml`) to see the default settings during training.
 
 
 ## Customized setting explanation
@@ -233,11 +249,11 @@ In their config files, the `sample` and `data` blocks are the same as the common
 - `noise`: 
     - `num_steps`: the number of sampling steps. It is an integer and $100$ should work well.
     - `init_step`: the initial step of noise. It is a scalar in $(0, 1]$ and default is $1$. During the sampling, the step will decay from `init_step` to $0$ linearly. Larger value means more noise. If it is set as $1$, the initial noisy molecule will be sampled from the noise prior without considering the input molecules. Specifically, the coordinates will be sampled from the Gaussian noise with mean equal to the noise space center.
-    If it is less than $1$ (and the parameter `from_prior` in the noise group is not set as `False` (default)), the initial noisy coordinates will be sampled from the Gaussian noise with mean equal to the input coordinates instead of the noise space center.
+    If it is less than $1$ (and the parameter `from_prior` in the noise group is not set as `True` (default is `False`)), the initial noisy coordinates will be sampled from the Gaussian noise with mean equal to the input coordinates instead of the noise space center.
     - `prior`: define the noise prior distributions for different noise groups. This is a dictionary, and each key is the noise group name and the value is the noise prior distribution. Tips:
         - For each noise group, define the noise prior distributions for `node` (atom type), `pos` (atom coordinate), and `edge` (bond type). You can refer to the noise prior settings in the training configuration file (`configs/train/train_pxm_reduced.yml`) for reference.
         - If there is only `pos` noise, you can set `pos_only` as `True`. 
-        - Set `from_prior` as `True` (default) to sample the initial noisy coordinates completely from the noise prior. If you want to consider the input coordinates, you can set `from_prior` as `False` to disable the initial noisy coordinates sampling from the noise prior but based on the input coordinates (see `unfixed_CCOOH_from_inputs.yml`) even if `noise/init_step` is set as $1$. This is useful when some atom coordinates of the input molecule can provide a good starting point for the generation or their approximate coordinates are known.
+        - Set `from_prior` as `True` to sample the initial noisy coordinates completely from the noise prior. If you want to consider the input coordinates, you can set `from_prior` as `False` to disable the initial noisy coordinates sampling from the noise prior but based on the input coordinates (see `unfixed_CCOOH_from_inputs.yml`) even if `noise/init_step` is set as $1$. This is useful when some atom coordinates of the input molecule can provide a good starting point for the generation or their approximate coordinates are known.
     - `level`: define information level strategies for different noise group. Information level strategy controls the noise scale at each step, i.e., it is a mapping from the step to the information level (within the interval $[0,1]$, information level is $1-$ *noise level*). Tips:
         - You can refere to the level settings in the training configuration file (`configs/train/train_pxm_reduced.yml`) for reference.
         - Usually the *uniform level* should work well for *de novo* generation. If you want to preserve more information of the input file, you can set the `min` level as a larger value.
