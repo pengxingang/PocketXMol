@@ -972,11 +972,14 @@ class MaskfillSampleNoiser(BaseSampleNoiser):
 
         # part 1 noise
         if task in ['maskfill', 'linking', 'sbdd', 'denovo']:  # sbdd, denovo in ar mode
-            from_prior_part1 = False
+            # from_prior_part1 = False
+            from_prior_part1 = self.prior_p1.config.get('from_prior', False) and from_prior
         elif task in ['fbdd', 'growing']:
-            from_prior_part1 = from_prior
+            # from_prior_part1 = from_prior
+            from_prior_part1 = self.prior_p1.config.get('from_prior', True) and from_prior
         else:
             raise ValueError(f'Unknown task: {task} to set from_prior_part1')
+        from_prior_part1 = from_prior_part1 and self.prior_p1.config.get('from_prior', True)
         prior = self.prior_p1
         level_dict_p1 = {k[:-3]:v for k, v in level_dict.items() if k.endswith('_p1')}
         

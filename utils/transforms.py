@@ -1295,6 +1295,13 @@ class MaskfillTransform:
 
         if self.mode == 'test':
             data = self.prepare_sample(data, setting)
+        data = self.remedy_anchor_nodes(data)
+        return data
+    
+    def remedy_anchor_nodes(self, data):
+        # break the bonds between p1 and p2 (mainly for setting connecting atoms)
+        halfedge_p1p2 = data["halfedge_p1p2"]
+        data['halfedge_type'][halfedge_p1p2] = 0
         return data
 
     def prepare_sample(self, data, setting):
@@ -1576,10 +1583,33 @@ class MaskfillTransform:
         return np.array(tree_order)
     
     def partition_from_preset(self, data: Mol3DData):
-        preset_partition = self.preset_partition
+        preset_partition = self.preset_partition.copy()
         n_nodes = data['node_type'].shape[0]
-        index_nodes = np.arange(n_nodes)
         
+        # re-index if some nodes are removed
+        if 'removed_index' in data:
+            removed_index = data['removed_index']
+            is_removed_node = np.zeros([n_nodes + len(removed_index)], dtype=bool)
+            is_removed_node[removed_index] = True
+            index_changes = np.cumsum(is_removed_node)
+            if 'grouped_node_p1' in preset_partition:
+                new_values = []
+                for group in preset_partition['grouped_node_p1']:
+                    new_group = [n - index_changes[n] for n in group if n not in removed_index]
+                    new_values.append(new_group)
+                preset_partition['grouped_node_p1'] = new_values
+            if 'node_p2' in preset_partition:
+                preset_partition['node_p2'] = [n - index_changes[n] for n in preset_partition['node_p2']
+                                                if n not in removed_index]
+            if 'grouped_anchor_p1' in preset_partition:
+                new_values = []
+                for group in preset_partition['grouped_anchor_p1']:
+                    new_group = [n - index_changes[n] for n in group if n not in removed_index]
+                    new_values.append(new_group)
+                preset_partition['grouped_anchor_p1'] = new_values
+        
+        # prepare partition
+        index_nodes = np.arange(n_nodes)
         grouped_node_p1 = preset_partition.get('grouped_node_p1', None)
         node_p2 = preset_partition.get('node_p2', None)
         assert (grouped_node_p1 is not None) or (node_p2 is not None), 'grouped_node_p1 or node_p2 should be set'
@@ -1604,7 +1634,6 @@ class MaskfillTransform:
         })
         return data
         
-
         
     def pre_make_partition(self, data: Mol3DData):
         if self.preset_partition is not None:  # set from config file. for use

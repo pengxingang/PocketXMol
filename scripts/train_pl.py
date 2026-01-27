@@ -32,7 +32,6 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.core.optimizer import LightningOptimizer
-from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities import grad_norm
 from pytorch_lightning.utilities.types import LRSchedulerTypeUnion
 from torch import Tensor
@@ -410,6 +409,8 @@ if os.environ.get("TERM_PROGRAM") == "vscode":
     is_vscode = True
 
 if __name__ == '__main__':
+    from pytorch_lightning.loggers import TensorBoardLogger  # only training script need this
+    # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str,
         default='configs/train/train_pxm.yml')

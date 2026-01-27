@@ -3,47 +3,52 @@ sample:
   seed: 2024
   batch_size: 100
   num_mols: 100
-  save_traj_prob: 0.02
+  save_traj_prob: 0.5
 
 
 data:
-  protein_path: data/examples/smallmol/2ar9_A.pdb
-  input_ligand: data/examples/smallmol/fragment.sdf
+  protein_path: data/examples/smallmol/moad_62740_pro.pdb
+  input_ligand: data/examples/smallmol/moad_62740_mol.sdf
   is_pep: False
   pocket_args:
-    radius: 13
+    radius: 10
+
 
 transforms:
+  featurizer:
+    mol_as_pocket_center: True  # use input ligand center as pocket center
   variable_mol_size:  # variable mol size
     name: variable_mol_size
     num_atoms_distri:
-      strategy: mol_atoms_based  # mol size from Normal(mean=28, std=2)
+      strategy: mol_atoms_based  # mol size from Normal(mean=40, std=3)
       mean:
         coef: 0
-        bias: 28
+        bias: 40
       std:
         coef: 0
-        bias: 2
+        bias: 3
       min: 5
-    not_remove: [0, 1, 2, 3, 4, 5, 6] # set this the same as init_frag so that these atoms will not be removed
+    not_remove: [0, 1, 2, 3, 4, 5, 6, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37]  # set this the same as fragments so that these atoms will not be removed
 
 
-# The following is for fragment growing with unfixed fragment position
+# The following is for fragment linking with fixed fragment position
 
 task:
-  name: growing
+  name: maskfill
   transform:
-    name: growing
+    name: maskfill
     preset_partition:
-      init_frag: [0, 1, 2, 3, 4, 5, 6]  # atom indices of initial fragment
+      grouped_node_p1: [[0, 1, 2, 3, 4, 5, 6], [23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37]]  # atom indices of fragments
+      grouped_anchor_p1: [[6], [23]]  # specify allowed connecting atoms for each fragment
     settings:
       part1_pert:
-        free: 1
+        fixed: 1
       known_anchor:
-        none: 1
+        all: 1  # use specified anchors
+
 
 noise:
-  name: fbdd
+  name: maskfill
   num_steps: 100
   prior:
     part1:

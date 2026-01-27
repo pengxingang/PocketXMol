@@ -1,0 +1,103 @@
+
+sample:
+  seed: 2024
+  batch_size: 100
+  num_mols: 100
+  save_traj_prob: 0.02
+
+
+data:
+  protein_path: data/examples/smallmol/moad_62740_pro.pdb
+  input_ligand: data/examples/smallmol/moad_62740_mol.sdf
+  is_pep: False
+  pocket_args:
+    radius: 10
+
+
+transforms:
+  featurizer:
+    mol_as_pocket_center: True  # use input ligand center as pocket center
+  variable_mol_size:  # variable mol size
+    name: variable_mol_size
+    num_atoms_distri:
+      strategy: mol_atoms_based  # mol size from Normal(mean=40, std=3)
+      mean:
+        coef: 0
+        bias: 38
+      std:
+        coef: 0
+        bias: 2
+      min: 5
+    not_remove: [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37]  # set this so that these atoms will not be removed
+
+
+# The following is for fragment linking with fixed fragment position
+
+task:
+  name: maskfill
+  transform:
+    name: maskfill
+    preset_partition:
+      grouped_node_p1: [[12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37]]  # atom indices of part1 fragments
+      # node_p2: [0,1,2,3,4,5,6]  # can also use node_p2 to specify atoms to be generated
+      grouped_anchor_p1: [[12]]  # specify allowed connecting atoms for the fragment
+    settings:
+      part1_pert:
+        fixed: 1
+      known_anchor:
+        all: 1
+
+
+noise:
+  name: maskfill
+  num_steps: 50
+  init_step: 0.5  # smaller means more similar to input structure
+  prior:
+    part1:
+      pos_only: True
+      pos: 
+        name: allpos
+        pos:
+          name: gaussian_simple
+          sigma_max: 1
+        translation:
+          name: translation
+          ve: False
+          mean: 0
+          std: 1
+        rotation:
+          name: rotation
+          sigma_max: 0.0002
+        torsional:
+          name: torsional
+          sigma_max: 0.2
+    part2:
+      node: 
+        name: categorical
+        prior_type: predefined
+        prior_probs: [3, 2, 2, 2, 1, 1, 1, 0.3, 0.3, 0.3, 0.3, 13.2]
+      pos: 
+        name: allpos
+        pos:
+          name: gaussian_simple
+          sigma_max: 1
+      edge: 
+        name: categorical
+        prior_type: tomask_half
+  level:
+    part1:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+    part2:
+      name: advance
+      min: 0.0
+      max: 1.0
+      step2level:
+        scale_start: 0.99999
+        scale_end: 1.0e-05
+        width: 3
