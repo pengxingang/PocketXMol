@@ -206,7 +206,7 @@ class BaseSampleNoiser:
         
         # # use fixed_dict to reset for fixed==1
         if not (batch.node_type[batch['fixed_node']==1] ==  in_dict['node'][batch['fixed_node']==1]).all():
-            print('Force fixed_node to be fixed')
+            # print('Force fixed_node to be fixed')
             is_fixed = (batch['fixed_node']==1)
             in_dict['node'][is_fixed] = batch.node_type[is_fixed]
         # assert (batch.node_pos[(batch['fixed_pos']==1)]
@@ -214,8 +214,13 @@ class BaseSampleNoiser:
         if not (batch.node_pos[(batch['fixed_pos']==1)]
                 - in_dict['pos'][batch['fixed_pos']==1]).abs().sum() < 1e-4:
             in_dict['pos'][batch['fixed_pos']==1] = batch.node_pos[batch['fixed_pos']==1]
-        assert (batch.halfedge_type[batch['fixed_halfedge']==1]
-                ==  in_dict['halfedge'][batch['fixed_halfedge']==1]).all()
+        # assert (batch.halfedge_type[batch['fixed_halfedge']==1]
+        #         ==  in_dict['halfedge'][batch['fixed_halfedge']==1]).all()
+        if not torch.isclose(batch.halfedge_type[batch['fixed_halfedge']==1],
+                in_dict['halfedge'][batch['fixed_halfedge']==1]).all():
+            # print('Force fixed_halfedge to be fixed')
+            is_fixed = (batch['fixed_halfedge']==1)
+            in_dict['halfedge'][is_fixed] = batch.halfedge_type[is_fixed]
 
         batch.update({f'{key}_in':value for key, value in in_dict.items()})
         
@@ -1571,9 +1576,10 @@ class PepdesignSampleNoiser(BaseSampleNoiser):
         if mode == 'full':
             level_dict_bb = {k[:-3]:v for k, v in level_dict.items() if k.endswith('_bb')}
             node_bb = batch['node_bb']
+            from_prior_bb = from_prior and self.prior_bb.config.get('from_prior', True)
             node_pos[node_bb] = self.prior_bb.add_noise(
                 None, node_pos[node_bb], None,
-                level_dict=level_dict_bb, from_prior=from_prior, pos_only=True
+                level_dict=level_dict_bb, from_prior=from_prior_bb, pos_only=True
             )
         
         # sc noise
@@ -1581,18 +1587,19 @@ class PepdesignSampleNoiser(BaseSampleNoiser):
         halfedge_sc = batch['halfedge_sc']
         halfedge_bbsc = batch['halfedge_bbsc']
         level_dict_sc = {k[:-3]:v for k, v in level_dict.items() if k.endswith('_sc')}
+        from_prior_sc = from_prior and self.prior_sc.config.get('from_prior', True)
         if mode in ['full', 'sc']:
             node_type[node_sc], node_pos[node_sc], halfedge_type[halfedge_sc] = self.prior_sc.add_noise(
                 node_type[node_sc], node_pos[node_sc], halfedge_type[halfedge_sc],
-                level_dict_sc, from_prior
+                level_dict_sc, from_prior_sc
             )
             halfedge_type[halfedge_bbsc] = self.prior_sc.halfedge.add_noise(
-                halfedge_type[halfedge_bbsc], level_dict['halfedge_bbsc'], from_prior
+                halfedge_type[halfedge_bbsc], level_dict['halfedge_bbsc'], from_prior_sc
             )
         elif mode == 'packing':
             node_pos[node_sc] = self.prior_sc.add_noise(
                 None, node_pos[node_sc], None,
-                level_dict=level_dict_sc, from_prior=from_prior, pos_only=True
+                level_dict=level_dict_sc, from_prior=from_prior_sc, pos_only=True
             )
         else:
             raise ValueError(f'Unknown mode: {mode}')

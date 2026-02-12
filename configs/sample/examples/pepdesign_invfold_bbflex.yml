@@ -1,0 +1,88 @@
+
+sample:
+  seed: 2024
+  batch_size: 50
+  num_mols: 100
+  save_traj_prob: 0.02
+
+
+data:
+  protein_path: data/examples/peptide/3bik_A.pdb
+  input_ligand: data/examples/peptide/P73.pdb
+  is_pep: True
+  pocket_args:
+    ref_ligand_path: data/examples/peptide/3bik_A_pocket_coord.sdf
+    radius: 20
+  pocmol_args:
+    data_id: pepdesign_invfold_bbflex
+    pdbid: 3bik
+
+
+transforms:
+  variable_sc_size:  # distributions of number of side-chain atoms
+    name: variable_sc_size
+    applicable_tasks: ['pepdesign']
+    num_atoms_distri:
+      mean: 8
+      std:
+        coef: 0.3817
+        bias: 1.8727
+    not_remove: []
+  featurizer_pocket:
+    center: [7.9130, -7.3910, -25.9240]  # space center for denosing
+
+
+#  The following defines the peptide design task
+task:
+  name: pepdesign
+  transform:
+    name: pepdesign
+    settings:
+      mode:
+        full: 1
+        sc: 0
+        packing: 0
+
+
+noise:
+  name: pepdesign
+  num_steps: 100
+  prior:
+    bb:
+      from_prior: False  # the initial noise of backbone will not use the **prior** distribution but from the input ligand
+      pos_only: True
+      pos:
+        name: allpos
+        pos: 
+          name: gaussian_simple
+          sigma_max: 3
+    sc:
+      node:
+        name: categorical
+        prior_type: predefined
+        prior_probs: [75, 10, 13, 0, 0, 0.3, 0, 0, 0, 0, 0, 98]
+      pos: 
+        name: allpos
+        pos:
+          name: gaussian_simple
+          sigma_max: 3
+      edge: 
+        name: categorical
+        prior_type: tomask_half
+  level:
+    bb:
+      name: advance
+      min: 0.95  # keep a high infomation level for backbone
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+    sc:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3

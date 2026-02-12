@@ -1,0 +1,76 @@
+
+sample:
+  seed: 2024
+  batch_size: 50
+  num_mols: 100
+  save_traj_prob: 0.02
+
+
+data:
+  protein_path: data/examples/peptide/3bik_A.pdb
+  input_ligand: data/examples/peptide/P73.pdb
+  is_pep: True
+  pocket_args:
+    ref_ligand_path: data/examples/peptide/3bik_A_pocket_coord.sdf
+    radius: 20
+  pocmol_args:
+    data_id: pepdesign_fix_pos
+    pdbid: 3bik
+
+
+transforms:
+  variable_sc_size:  # distributions of number of side-chain atoms
+    name: variable_sc_size
+    applicable_tasks: ['pepdesign']
+    num_atoms_distri:
+      mean: 8
+      std:
+        coef: 0.3817
+        bias: 1.8727
+    # You need to add the side-chain atom indices that should not be removed during designing (backbone by default will not be removed)
+    # You can open PyMol, select residues you want to fix, and run this in PyMol: `iterate (sele and sc.), print(rank, end=',')`
+    not_remove: [6,5,4,7,12,13,14,21,19,20, 73,74,75,76,77,78] # = res_sc + atom specified in fix_pos below.
+  featurizer_pocket:
+    center: [7.9130, -7.3910, -25.9240]  # space center for denosing
+
+
+#  The following defines the peptide design task
+task:
+  name: pepdesign
+  transform:
+    name: pepdesign
+    # specify fixed positions of atoms/residues (index counts from 0) in the input_ligand file
+    fix_pos:
+      res_bb: [0, 1, 8, 9] # backbone atoms of residues with indices 0-2 and 8-9 (sequence fragments DTV and FL in this example P73.pdb)
+      res_sc: [0, 1]  # side-chain atoms of residues with indices 0-1 (residues DT in this example P73.pdb)
+      atom: [73, 74, 75, 76, 77, 78]  # the atoms with indices 73-78 (benzene ring of PHE in this example P73.pdb)
+    settings:
+      mode:
+        full: 1
+        sc: 0
+        packing: 0
+
+
+noise:
+  name: pepdesign
+  num_steps: 100
+  prior:
+    bb: from_train
+    sc: from_train
+  level:
+    bb:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+    sc:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3

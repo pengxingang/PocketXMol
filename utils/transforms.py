@@ -1851,6 +1851,9 @@ class PepdesignTransform:
                 self.settings_dict[key] = {'options': list(value_dict.keys()), 'weights': list(value_dict.values())}
                 assert all(op in PEPDESIGN_SETTINGS[key] for op in self.settings_dict[key]['options']),\
                         f"unknown maskfill setting {self.settings_dict[key]} for setting {key}"
+
+        self.fix_pos = config.get('fix_pos', None)
+        self.fix_type_only = config.get('fix_type_only', None)
     
     def __call__(self, data: Mol3DData):
         setting = self.sample_setting()
@@ -1943,7 +1946,6 @@ class PepdesignTransform:
                     [n_node_sc, n_halfedge_sc, n_halfedge_bbsc], [1, 1, 1])
             else:
                 raise ValueError(f"Unknown mode: {setting['mode']}")
-        
 
         fixed_dict = {
             'node_bb': fixed_node_bb,
@@ -1968,6 +1970,9 @@ class PepdesignTransform:
             [fixed_dict[f'halfedge_bb'], fixed_dict[f'halfedge_sc'], fixed_dict[f'halfedge_bbsc']],
             [data['halfedge_bb'], data['halfedge_sc'], data['halfedge_bbsc']],
         )
+        
+        self.add_simple_fix_modify(data, fixed_node, fixed_pos, fixed_halfedge)  # for easy use. not important for training/sampling
+        
         data.update({
             'fixed_node': fixed_node,
             'fixed_pos': fixed_pos,
@@ -1980,12 +1985,108 @@ class PepdesignTransform:
         fixed_halfdist = torch.zeros_like(data['halfedge_type'], dtype=torch.long)  # default not fixed distances
         if setting['mode'] in ['sc', 'packing']:  # fixed distances of bb
             fixed_halfdist[data['halfedge_bb']] = 1
+            
+        self.add_simple_fix_dist_modify(data, fixed_halfdist, fixed_pos)  # for easy use. not important for training/sampling
+        
         data.update({
             'fixed_halfdist': fixed_halfdist,
             'n_domain': n_domain,
             'domain_node_index': domain_node_index,
         })
         return data
+    
+    def add_simple_fix_modify(self, data, fixed_node, fixed_pos, fixed_halfedge):
+        if (self.fix_pos is None) and (self.fix_type_only is None):
+            return  # no modification needed
+        
+        # re-index if some nodes are removed
+        n_nodes = data['node_type'].shape[0] # N
+        if 'removed_index' in data:
+            removed_index = data['removed_index'] # M removed atoms
+            is_removed_node = np.zeros([n_nodes + len(removed_index)], dtype=bool)  # N+M
+            is_removed_node[removed_index] = True
+            index_changes = np.cumsum(is_removed_node)  # N+M
+            def index_mapper(orig_indices):
+                return [n - index_changes[n] for n in orig_indices if n not in removed_index]
+            peptide_res_index = np.array(data['peptide_res_index'], dtype=np.int32)  # N+M
+            peptide_res_index = peptide_res_index[~is_removed_node]  # res_index of remaining atoms; N
+        else:  # add
+            def index_mapper(orig_indices):
+                return orig_indices
+            peptide_res_index = np.concatenate([
+                np.array(data['peptide_res_index'], dtype=np.int32),
+                np.ones(n_nodes-len(data['peptide_res_index']), dtype=np.int32)*(-10000)
+            ])
+            
+        def get_new_atom_indices(fix_dict):
+            fixed_atom_indices = np.array(fix_dict.get('atom', []))
+            fixed_atom_indices = index_mapper(fixed_atom_indices)
+            res_bb = fix_dict.get('res_bb', [])
+            res_sc = fix_dict.get('res_sc', [])
+            
+            fixed_unconnect_indices = np.array([], dtype=np.int64)
+            if res_bb or res_sc:
+                is_backbone = np.array(data['peptide_is_backbone'], dtype=bool)  # had already been updated in VariableSC transform
+                
+                is_sel_res_bb = ((peptide_res_index[:, None] == np.array(res_bb)[None]).any(-1)
+                                    & is_backbone)
+                is_sel_res_sc = ((peptide_res_index[:, None] == np.array(res_sc)[None]).any(-1)
+                                    & (~is_backbone))
+                add_atoms_indices = np.nonzero(is_sel_res_bb | is_sel_res_sc)[0]
+                fixed_atom_indices = np.concatenate([fixed_atom_indices, add_atoms_indices])
+                
+                # These cannot connect to newly generated atoms: all of res_sc and CA/N of res_bb (C/O of res_bb can connect to new atoms by default, so no more fix needed)
+                # therefore the edge_type between these atoms and new atoms should be fixed
+                peptide_atom_name = np.array(data['peptide_atom_name'])
+                is_sel_res_bb_ca_or_n = ((peptide_atom_name == 'CA') | (peptide_atom_name == 'N')) & is_sel_res_bb
+                fixed_unconnect_indices = np.nonzero(is_sel_res_sc | is_sel_res_bb_ca_or_n)[0]
+            return np.unique(fixed_atom_indices), np.unique(fixed_unconnect_indices)
+        
+        fixed_unconnect_indices = np.array([], dtype=np.int64)
+        if self.fix_pos is not None:
+            assert isinstance(self.fix_pos, dict), 'fix_pos should be a dict'
+            fixed_pos_indices, add_unconnect_indices = get_new_atom_indices(self.fix_pos.copy())
+            fixed_unconnect_indices = np.concatenate([fixed_unconnect_indices, add_unconnect_indices])
+        else:
+            fixed_pos_indices = np.array([], dtype=np.int64)
+        if self.fix_type_only is not None:
+            assert isinstance(self.fix_type_only, dict), 'fix_type_only should be a dict'
+            fixed_type_indices, add_unconnect_indices = get_new_atom_indices(self.fix_type_only.copy())
+            fixed_unconnect_indices = np.concatenate([fixed_unconnect_indices, add_unconnect_indices])
+        else:
+            fixed_type_indices = np.array([], dtype=np.int64)
+        fixed_type_indices = np.unique(np.concatenate([fixed_type_indices, fixed_pos_indices]))  # fix_pos must also fix type
+
+        # pos
+        if len(fixed_pos_indices) > 0:
+            fixed_pos[fixed_pos_indices] = 1
+        # node
+        if len(fixed_type_indices) > 0:
+            fixed_node[fixed_type_indices] = 1
+        # fix inner halfedges
+        if len(fixed_type_indices) > 1:
+            fixed_node_indices = torch.tensor(fixed_type_indices, dtype=torch.long)
+            halfedge_index = data.halfedge_index
+            i_all_halfedge = torch.arange(halfedge_index.shape[1], dtype=torch.long)
+            halfedge_inner_fixed_type = subgraph(fixed_node_indices, halfedge_index, i_all_halfedge)[1]
+            fixed_halfedge[halfedge_inner_fixed_type] = 1
+        if len(fixed_unconnect_indices) > 0:
+            fixed_unconnect_indices = torch.tensor(fixed_unconnect_indices, dtype=torch.long)
+            halfedge_index = data.halfedge_index  # (2, n_halfedge)
+            is_related = (halfedge_index[..., None] == fixed_unconnect_indices).any(-1).any(0)
+            fixed_halfedge[is_related] = 1
+            
+        return 
+    
+    def add_simple_fix_dist_modify(self, data, fixed_halfdist, fixed_pos):
+        # fix halfdist if both nodes' positions are fixed
+        n_nodes = fixed_pos.shape[0]
+        halfedge_index = data.halfedge_index
+        is_ends_fixed_pos = (fixed_pos[halfedge_index] == 1).all(0)  # (2, n_halfedge) -> (n_halfedge,)
+        fixed_halfdist[is_ends_fixed_pos] = 1
+        return
+        
+    
 
 
     def set_torsional_feat(self, data: Mol3DData):

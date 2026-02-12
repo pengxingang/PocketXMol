@@ -1,0 +1,82 @@
+
+sample:
+  seed: 2024
+  batch_size: 50
+  num_mols: 100
+  save_traj_prob: 0.02
+
+
+data:
+  protein_path: data/examples/peptide/3bik_A.pdb
+  input_ligand: data/examples/peptide/P73.pdb
+  is_pep: True
+  pocket_args:
+    ref_ligand_path: data/examples/peptide/3bik_A_pocket_coord.sdf
+    radius: 20
+  pocmol_args:
+    data_id: pepdesign_fix_pos_and_type
+    pdbid: 3bik
+
+
+transforms:
+  variable_sc_size:  # distributions of number of side-chain atoms
+    name: variable_sc_size
+    applicable_tasks: ['pepdesign']
+    num_atoms_distri:
+      mean: 8
+      std:
+        coef: 0.3817
+        bias: 1.8727
+    # You need to add the side-chain atom indices that should not be removed during designing (backbone by default will not be removed)
+    # You can open PyMol, select residues you want to fix, and run this in PyMol: `iterate (sele and sc.), print(rank, end=',')`
+    not_remove: [56,57,60,58,59,65,66,67,72,76,75,77,74,78,73,84,86,83,85] # = res_sc + atom specified in fix_pos/fix_type_only below.
+  featurizer_pocket:
+    center: [7.9130, -7.3910, -25.9240]  # space center for denosing
+
+
+#  The following defines the peptide design task
+task:
+  name: pepdesign
+  transform:
+    name: pepdesign
+    # specify fixed positions/types of atoms/residues (index counts from 0) in the input_ligand file
+    # in this config, you will get peptide XXXXXXEVFL: designing the first 6 residues,
+    # while fixing positions of residue 8 (F) and fixing residue types of residues 6,7,8,9 (E,V,F,L)
+    fix_pos:
+      res_bb: [8]
+      res_sc: [8]
+      atom: []
+    fix_type_only:
+      res_bb: [6, 7, 9]
+      res_sc: [6, 7, 9]
+      atom: []
+    settings:
+      mode:
+        full: 1
+        sc: 0
+        packing: 0
+
+
+noise:
+  name: pepdesign
+  num_steps: 100
+  prior:
+    bb: from_train
+    sc: from_train
+  level:
+    bb:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+    sc:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3

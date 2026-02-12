@@ -153,7 +153,14 @@ The configuration files are in `configs/sample/examples`, including:
         - `opt_mol.yml`: optimize the input small molecules for protein pocket
         - `opt_partial.yml`: optimize the specific fragments of the input molecules for protein pocket
 - Peptide design
-    - `pepdesign.yml`: design peptides for protein pocket
+    - `pepdesign_denovo.yml`: design novel peptides for protein pocket
+    - `pepdesign_fix_pos.yml`: constrained design, with some atom/residues fixed as input ligand, both the positions and types are fixed
+    - `pepdesign_fix_type.yml`: constrained design, with some atom types (residue types) fixed as input ligand (positions not fixed), thus you can only design other residue types
+    - `pepdesign_fix_pos_and_type.yml`: constrained design, with some atom/residues fixed as input ligand, some atom/residue types fixed (positions not fixed), thus you can only design other residue types and the positions of unfixed residues
+    - `pepdesign_invfold.yml`: peptide inverse folding, i.e., design peptide sequences for the input peptide backbone structure
+    - `pepdesign_invfold_bbflex.yml`: peptide inverse folding with backbone flexibility, i.e., allowing slight movement of backbone atoms during generation
+    - `pepdesign_sc_pack.yml`: peptide side-chain packing, i.e., design side-chain atom coordinates for the input peptide backbone and side-chain atom types (actually this is not a design task)
+    - `pepdesign_opt.yml`: peptide optimization, i.e., designing new peptides similar to the input peptide.
 - Design with customized settings:
     - `pepdesign_hot136E`: this directory considers a specific peptide design case. Based on the PD1-PDL1 complex (PDB ID: 3BIK), we found a hot spot residue 136E on PD1 interacting with PDL1. 
     We aim to design a PDL1-binding peptide considering this interaction. 
