@@ -158,7 +158,7 @@ if __name__ == '__main__':
     parser.add_argument('--config_task', type=str, default='configs/sample/examples/dock_pep_know_some.yml', help='task config')
     parser.add_argument('--config_model', type=str, default='configs/sample/pxm.yml', help='model config')
     parser.add_argument('--outdir', type=str, default='./outputs_use')
-    parser.add_argument('--device', type=str, default='cuda:1')
+    parser.add_argument('--device', type=str, default='cuda:0')
     parser.add_argument('--batch_size', type=int, default=0, help='batch size; by default use the value in the config file')
     parser.add_argument('--shuffle', type=bool, default=False)
     parser.add_argument('--num_workers', type=int, default=-1, help='num_workers for dataloader; by default use the value in the train config file')
