@@ -28,7 +28,6 @@ from itertools import cycle
 # Third-party imports
 import numpy as np
 import torch
-import torch.utils.tensorboard
 from Bio import PDB
 from Bio.SeqUtils import seq1
 from easydict import EasyDict
@@ -189,7 +188,7 @@ if __name__ == '__main__':
     log_root = args.outdir
     log_dir = get_new_log_dir(log_root, prefix=config_name)
     logger = get_logger('sample', log_dir)
-    writer = torch.utils.tensorboard.SummaryWriter(log_dir)
+    # writer = torch.utils.tensorboard.SummaryWriter(log_dir)
     logger.info('Load from %s...' % config.model.checkpoint)
     logger.info(args)
     logger.info(config)

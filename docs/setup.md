@@ -15,27 +15,49 @@ conda activate pxm
 
 > **Note:** If you have a different CUDA version, modify the pytorch-related package versions in `environment.yml` before creating the environment.
 
-### Option B: Manual Installation (Pip)
+### Option A2: Conda for CUDA 12.8
 
-If you need a custom setup (e.g., for **CUDA 12.6**), install dependencies manually:
+For systems with **CUDA 12.8**, use the provided base environment file `environment_cu128_base.yml`:
 
 ```bash
-# PyTorch for CUDA 12.6
-pip install torch --index-url https://download.pytorch.org/whl/cu126
-pip install pytorch-lightning
-pip install torch_geometric
+conda env create -f environment_cu128_base.yml
+conda activate pxm_cu128
+```
 
-# PyG dependencies
+Then install the CUDA 12.8 PyTorch + PyG stack (copy/paste as a whole):
+
+```bash
+pip install torch==2.7.0 --index-url https://download.pytorch.org/whl/cu128
+pip install lightning torch_geometric
+pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.7.0+cu128.html
+```
+
+
+### Option B: Manual Installation (Pip)
+
+If you need custom versions (e.g., specific CUDA/PyTorch/PyG pins), install packages step by step.
+
+For example, for CUDA 12.6 (Python 3.10):
+```bash
+# PyTorch for CUDA 12.6
+pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
+pip install pytorch-lightning==2.6.0
+# pip install pytorch-lightning==2.3.0
+pip install torch_geometric==2.6.1
+# pip install torch_geometric==2.7.0
+
+# PyG extensions (must match torch version + CUDA tag)
 pip install torch_scatter torch_sparse torch_cluster -f https://data.pyg.org/whl/torch-2.6.0+cu126.html
 
 # Bio/Chem informatics
 pip install biopython==1.83 rdkit==2023.9.3 peptidebuilder==1.1.0
-pip install openbabel==3.1.1.1  # or: conda install -c conda-forge openbabel -y
+pip install openbabel-wheel==3.1.1.11  # or: conda install -c conda-forge openbabel -y
 
 # Utilities
-pip install lmdb easydict==1.9 numpy==1.24 pandas==1.5.2 scipy==1.10.1
-pip install tensorboard  # for training only
+pip install lmdb==1.7.5 easydict==1.9 numpy==1.24 pandas==1.5.2 scipy==1.10.1
+pip install tensorboard==2.20.0  # for training only
 ```
+
 
 ## 2. Data & Model Weights
 
@@ -45,7 +67,7 @@ All training/test data and model weights are available on [Zenodo](https://zenod
 The `model_weights.tar.gz` archive contains trained checkpoints. Download and extract it:
 
 ```bash
-wget https://zenodo.org/records/17801271/files/model_weights.tar.gz
+wget -c https://zenodo.org/records/17801271/files/model_weights.tar.gz
 tar -zxvf model_weights.tar.gz
 ```
 *Creates: `data/trained_models/` containing the weights.*
@@ -56,7 +78,7 @@ tar -zxvf model_weights.tar.gz
 To run benchmarks on standard test sets (PoseBusters, CrossDocked, etc.), download `data_test.tar.gz`:
 
 ```bash
-wget https://zenodo.org/records/17801271/files/data_test.tar.gz
+wget -c https://zenodo.org/records/17801271/files/data_test.tar.gz
 tar -zxvf data_test.tar.gz
 ```
 *Creates:*
@@ -67,7 +89,7 @@ tar -zxvf data_test.tar.gz
 To train on the reduced demonstration dataset, download `data_train_processed.tar.gz`:
 
 ```bash
-wget https://zenodo.org/records/17801271/files/data_train_processed.tar.gz
+wget -c https://zenodo.org/records/17801271/files/data_train_processed.tar.gz
 tar -zxvf data_train_processed.tar.gz
 ```
 *Creates: `data_train` with reduced training sets.*

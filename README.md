@@ -26,13 +26,14 @@ Interactive notebooks are available under [notebooks/](notebooks) and on Colab:
 
 ### 1) Create the environment
 
-Using conda (environment.yml includes CUDA 11.7 setup):
+Using conda to create the environment. For CUDA 11.7, use the provided `environment.yml`:
 
 ```bash
 conda env create -f environment.yml
 conda activate pxm
 ```
-For other options (e.g., manual pip install for different CUDA versions), see [Setup Guide](docs/setup.md).
+
+For other options (manual pip), see [Setup Guide](docs/setup.md).
 
 ### 2) Download model weights
 
@@ -54,6 +55,8 @@ python scripts/sample_use.py \
         --device cuda:0
 ```
 *(If you encounter GPU OOM errors, add `--batch_size 50` to adjust batch_size or modify the config).*
+
+For more examples and detailed instructions, see the [Sampling Guide](docs/sample_provided_data.md).
 
 **Outputs**:
 

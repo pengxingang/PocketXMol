@@ -33,6 +33,7 @@ This guide covers how to run various generation tasks using the example data pro
     - [3.5.7 Noise schedule reference](#357-noise-schedule-reference)
 - [4. Defining Custom Tasks](#4-defining-custom-tasks)
   - [4.1 How to define a custom task](#41-how-to-define-a-custom-task)
+  - [4.2 Walkthrough of the example configs](#42-walkthrough-of-the-example-configs)
 
 ---
 
@@ -876,9 +877,9 @@ Maps denoising step linearly: $\text{info\_level} = \text{max} - (\text{max} - \
 
 For advanced use cases beyond the built-in task types, the `custom` task allows defining arbitrary molecule partitions, per-part constraints, and independent noise groups. This section demonstrates with the `pepdesign_hot136E` example in `configs/sample/examples/pepdesign_hot136E/`.
 
-> All common tasks (docking, SBDD, maskfill, pepdesign) can also be expressed through the `custom` task. The basic idea is to: (1) partition the molecule into named parts, (2) define noise groups with independent priors/schedules, and (3) map noise groups to molecule parts.
+> All common tasks (docking, SBDD, maskfill, pepdesign) can also be expressed through the `custom` task. The basic idea is to: (1) partition the molecule into named parts, (2) define several groups of noise with independent priors/schedules, and (3) map the noise groups to the molecule parts.
 
-**Background:** Based on the PD-1/PD-L1 complex (PDB: 3BIK), a hot-spot residue 136E on PD-1 interacting with PDL1 was identified. The goal is to design a PDL1-binding peptide considering this interaction. The protein fragment around 136E serves as the input peptide and the PDL1 chain as the target (data in `data/examples/hot136E`).
+**Background:** Based on the PD-1/PD-L1 complex (PDB: 3BIK), a hot-spot residue 136E on PD-1 interacting with PD-L1 was identified. The goal is to design a PD-L1-binding peptide considering this interaction. The protein fragment around 136E serves as the input peptide and the PD-L1 chain as the target (data in `data/examples/hot136E`).
 
 **Example scenarios:**
 
@@ -893,82 +894,241 @@ For advanced use cases beyond the built-in task types, the `custom` task allows 
 
 ### 4.1 How to define a custom task
 
-A custom task requires configuring three things: **partition**, **constraints**, and **multi-group noise**.
+A custom task requires configuring three blocks: `transforms` (optional), `task`, and `noise`.
 
-**1. Task Transform (`task.transform`)**
+In the config files, the `sample` and `data` blocks are the same as in the common tasks. The other blocks are explained below.
 
-Defines the molecule partition and constraints:
+#### Transforms
+
+Similar to the common tasks, but with some additional settings for custom tasks (peptide design example):
+
+- `variable_sc_size.applicable_tasks` should contain the task name `'custom'`.
+- `variable_sc_size.not_remove`: a list of atom indices (0-based in the input peptide) to exclude from random side-chain atom removal. This protects specific atoms (e.g., the -CCOOH group) from being removed when variable-size side chains are sampled.
+
+```yaml
+transforms:
+  variable_sc_size:
+    name: variable_sc_size
+    applicable_tasks: ['custom']
+    num_atoms_distri:
+      mean: 8.5
+      std:
+        coef: 0.3817
+        bias: 1.8727
+    not_remove: [45, 46, 47, 48]   # protect these atoms from removal
+  featurizer_pocket:
+    center: [12.9130, -5.3910, -30.0240]
+```
+
+#### Task Transform (`task`)
+
+Defines the molecule partition and per-part constraints:
 
 ```yaml
 task:
   name: custom
   transform:
-    is_peptide: true        # or false for small molecules
-    partition:
-      - name: hotspot       # named part
-        nodes: [40, 41, 42, 43, 44]   # 0-based atom indices
-      - name: rest
-        nodes: [0, 1, ..., 39, 45, ...]
+    name: custom
+    is_peptide: true          # whether the task is for peptide (prompt P^pep)
+    partition:                # partition all atoms into named parts
+      - name: Canchor
+        nodes: [45]           # 0-based atom indices
+      - name: COOH
+        nodes: [46, 47, 48]
+      - name: bbanchor
+        nodes: [0, 1, 9, 10, 14, 15, ...]   # CA, N of backbones
+      - name: bbbody
+        nodes: [2, 3, 11, 12, 16, 17, ...]   # C, O of backbones
+      - name: sc
+        nodes: others         # special keyword: all remaining atoms
     fixed:
-      node: [hotspot]       # fix atom types for these parts
-      pos: [hotspot]        # fix coordinates for these parts
-      edge: [[hotspot]]     # fix bonds within/between these parts
+      node: [Canchor, COOH, bbanchor, bbbody]   # fix atom types
+      pos: [Canchor, COOH]                       # fix coordinates
+      edge:                                      # fix bonds (list of part pairs)
+      - [Canchor, Canchor]
+      - [Canchor, COOH]
+      - [Canchor, bbbody]
+      - [COOH, COOH]
+      - [bbanchor, bbanchor]
+      - [bbanchor, bbbody]
+      - [bbbody, bbbody]
+      - [bbbody, sc]
 ```
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `is_peptide` | `bool` | Whether the molecule is a peptide |
-| `partition` | `list[dict]` | Named parts, each with `name` and `nodes` (0-based atom indices) |
+| `is_peptide` | `bool` | Whether the molecule is a peptide or small molecule. This is the prompt $\mathbf{P}^{\text{pep}}$ in the paper. |
+| `partition` | `list[dict]` | List of named parts, each with `name` (string) and `nodes` (list of 0-based atom indices or the keyword `others`). The `others` keyword assigns all remaining atoms to this part and **must be the last** partition. |
 | `fixed.node` | `list[string]` | Part names whose atom types are fixed from input |
 | `fixed.pos` | `list[string]` | Part names whose coordinates are fixed from input |
-| `fixed.edge` | `list[list[string]]` | Part name pairs whose bond types are fixed |
+| `fixed.edge` | `list[list[string]]` | Part name **pairs** whose bond types are fixed. Each entry is `[partA, partB]` — use `[partA, partA]` for bonds within one part, `[partA, partB]` for bonds between two parts. |
 
-**2. Noise Settings (`noise`)**
+> **Note:** You only need to list the part pairs for which bonds should be fixed. Bonds not covered by any listed pair will be generated by the model.
 
-Define independent noise groups and map them to molecule parts:
+#### Noise Settings (`noise`)
+
+Define independent noise groups and map them to molecule parts. Each noise group has its own prior distribution, information level schedule, and mapping to molecule parts:
 
 ```yaml
 noise:
+  name: custom
   num_steps: 100
-  init_step: 1.0         # or < 1 for refinement from input
-  prior:
-    group_fixed:          # noise group for the fixed part
+  init_step: 1               # or < 1 for refinement from input
+  prior:                      # define prior noise for each noise group
+    bb:                       # noise group for backbone positions
       pos_only: true
-      from_prior: false   # start from input coordinates
       pos:
-        name: gaussian_simple
-        sigma_max: 0.5
-    group_flex:           # noise group for the flexible part
-      node: ...           # full noise distributions
-      pos: ...
-      edge: ...
-  level:
-    group_fixed:
-      name: uniform
-      min: 0.8            # high info level → low noise
-      max: 1.0
-    group_flex:
+        name: allpos
+        pos:
+          name: gaussian_simple
+          sigma_max: 3
+    sc:                       # noise group for side-chain generation
+      node:
+        name: categorical
+        prior_type: predefined
+        prior_probs: [75, 10, 13, 0, 0, 0.3, 0, 0, 0, 0, 0, 98]
+      pos:
+        name: allpos
+        pos:
+          name: gaussian_simple
+          sigma_max: 3
+      edge:
+        name: categorical
+        prior_type: tomask_half
+  level:                      # define information level for each noise group
+    bb:
       name: advance
-      min: 0.0
-      max: 1.0
-      step2level: ...
-  mapper:                 # map noise groups → molecule parts
-    group_fixed:
-      node: hotspot
-      pos: hotspot
-      edge: hotspot
-    group_flex:
-      node: rest
-      pos: rest
-      edge: rest
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+    sc:
+      name: advance
+      min: 0.
+      max: 1.
+      step2level:
+        scale_start: 0.99999
+        scale_end: 0.00001
+        width: 3
+  mapper:                     # map noise groups to molecule parts
+    bb:
+      pos: [bbanchor, bbbody]             # list of part names
+    sc:
+      node: [sc]
+      pos: [sc]
+      edge:                               # list of part-name pairs
+      - [Canchor, bbanchor]
+      - [Canchor, sc]
+      - [bbanchor, sc]
+      - [sc, sc]
 ```
+
+**`noise` field reference:**
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `init_step` | `float` ∈ (0, 1] | `1.0` = pure noise start; `< 1.0` = start from input (perturbed). Step decays from `init_step` to 0 linearly. |
-| `prior.<group>.pos_only` | `bool` | If `true`, only positional noise (no atom type / bond noise) |
-| `prior.<group>.from_prior` | `bool` | `true` = sample initial coords from noise prior even when `init_step` < 1. `false` (default) = center noise on input coords. |
-| `level.<group>.min` | `float` | Minimum information level. Higher → less noise → more input preservation. |
-| `mapper` | `dict` | Maps each noise group to molecule parts for `node`, `pos`, `edge` channels. |
+| `name` | `string` | Must be `custom` |
+| `num_steps` | `int` | Number of sampling steps. `100` works well. |
+| `init_step` | `float` ∈ (0, 1] | Initial noise step. `1.0` = sample initial molecule from the noise prior (de novo); `< 1.0` = start from input molecule with reduced noise — the step decays from `init_step` to 0 linearly. Smaller value → less initial perturbation → more input preservation. |
 
-**(See the YAML files in `configs/sample/examples/pepdesign_hot136E/` for exact syntax. Refer to `configs/train/train_pxm_reduced.yml` for training default noise settings.)**
+**`noise.prior.<group>` field reference:**
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `pos_only` | `bool` | If `true`, this group only has positional noise (no atom type or bond noise). |
+| `from_prior` | `bool` | Controls initial coordinate sampling. Default `true`. When `true`, initial coordinates are sampled from the noise prior (Gaussian centered at the denoising space center). When `false`, initial coordinates are centered on the **input** coordinates even when `init_step: 1` — useful when the approximate coordinates of the input molecule are known and provide a good starting point (see `unfixed_CCOOH_from_inputs.yml`). |
+| `node` / `pos` / `edge` | `dict` | Prior distribution for each variable channel. Refer to `configs/train/train_pxm_reduced.yml` for reference on distribution settings. |
+
+**`noise.level.<group>` field reference:**
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `name` | `string` | Level strategy (e.g., `advance`, `uniform`). |
+| `min` | `float` | Minimum information level (information level = 1 − noise level). Higher `min` → less noise → more input preservation. A `uniform` strategy with `min > 0` ensures atoms never receive full noise. |
+| `max` | `float` | Maximum information level. Usually `1.0`. |
+| `step2level` | `dict` | Parameters for the level schedule (e.g., `scale_start`, `scale_end`, `width`). Refer to training configs for reference. |
+
+**`noise.mapper.<group>` field reference:**
+
+The mapper connects each noise group to the molecule parts defined in `task.transform.partition`:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `node` | `list[string]` | List of part names whose atom types are controlled by this noise group. |
+| `pos` | `list[string]` | List of part names whose coordinates are controlled by this noise group. |
+| `edge` | `list[list[string]]` | List of part-name **pairs** `[partA, partB]` whose bonds are controlled by this noise group. |
+
+> **Note:** Each atom/bond should be covered by exactly one noise group. Atoms or bonds that are fixed (via `task.transform.fixed`) are not affected by noise, but the mapper still needs to account for them.
+
+**(Refer to `configs/train/train_pxm_reduced.yml` for training default noise prior and level settings.)**
+
+### 4.2 Walkthrough of the example configs
+
+All six configs in `configs/sample/examples/pepdesign_hot136E/` share the same `sample` and `data` blocks (protein: PD-L1 from 3BIK; input peptide: the PD-1 fragment around hot-spot 136E). They differ in **partition**, **fixed constraints**, **noise groups**, and **noise initialization**. Below we trace how each config is derived.
+
+#### `fixed_CCOOH.yml` — Fixed -CCOOH pose, design side chains
+
+This is the base case. The -CCOOH functional group has both its atom/bond types and coordinates completely fixed. The rest of the backbone has fixed atom types but flexible coordinates. Side-chain atoms are fully generated.
+
+- **Partition (5 parts):** `Canchor` (the -C- atom, index 45), `COOH` (indices 46–48), `bbanchor` (backbone CA, N), `bbbody` (backbone C, O), `sc` (all remaining = side chains).
+- **Fixed:** `node` = all except `sc`; `pos` = `Canchor` + `COOH` only; `edge` = all intra-backbone and CCOOH-related pairs.
+- **Noise groups (2):** `bb` (pos_only, controls backbone positions) and `sc` (full node/pos/edge, controls side-chain generation).
+- **Mapper:** `bb.pos` → `[bbanchor, bbbody]`; `sc.node/pos` → `[sc]`; `sc.edge` → cross-part bonds involving `sc` and `Canchor`.
+- **`init_step: 1`** — full de novo generation from the noise prior.
+
+#### `fixed_CCOOH_init0.9.yml` — Same as above, but start from input pose
+
+Identical to `fixed_CCOOH.yml` except:
+
+- **`init_step: 0.9`** — instead of sampling from the prior, the initial noisy peptide is perturbed from the **input** coordinates with reduced noise. This preserves the overall input structure while still allowing the model to optimize. Useful when the input peptide already has a reasonable conformation.
+
+#### `fixed_Glu_CCOOH.yml` — Fix the entire Glu residue identity
+
+Here the 6th residue is constrained to be Glutamate (Glu). Its -CCOOH group coordinates are fixed, and its backbone + CB are placed in the fixed-type body part so the model cannot change the residue identity.
+
+Key differences from `fixed_CCOOH.yml`:
+
+- **Partition (4 parts):** No separate `Canchor`; instead `CCOOH` = [45, 46, 47, 48] (includes the -C- atom). `bbbody` includes the full Glu backbone atoms (40–44, i.e., CA, N, C, O, CB of the 6th residue). `bbanchor` excludes the 6th residue's CA/N (since those are now in `bbbody`).
+- **`not_remove`** adds index 44 (Glu CB) to protect it from side-chain removal.
+- **Fixed:** `node` = `COOH` + `bbanchor` + `bbbody` (all backbone types fixed, Glu identity forced); `pos` = `COOH` only.
+- **Noise groups (2):** Same `bb` + `sc` structure; mapper maps `bb.pos` → `[bbanchor, bbbody]`, `sc.edge` → only `[bbanchor, sc]` + `[sc, sc]` (fewer cross-part edge pairs since Glu-related bonds are fixed).
+
+#### `unfixed_CCOOH.yml` — CCOOH types fixed, coordinates free
+
+The -CCOOH atom types are fixed but their 3D coordinates are **not** fixed — a separate noise group controls the CCOOH positional noise independently from the backbone and side chains.
+
+Key differences from `fixed_CCOOH.yml`:
+
+- **Fixed:** `pos` is **empty** (no coordinates fixed for any part). `node` and `edge` remain the same as `fixed_CCOOH.yml`.
+- **Noise groups (3):** A new `CCOOH` group is introduced (pos_only, Gaussian σ_max=3) alongside `bb` and `sc`. The `CCOOH` group's mapper: `pos` → `[Canchor, COOH]`.
+- **Effect:** The CCOOH group is denoised with its own schedule, allowing it to find its optimal pose independently.
+
+#### `unfixed_CCOOH_from_inputs.yml` — Same as above, biased toward input pose
+
+Identical to `unfixed_CCOOH.yml` except:
+
+- **`CCOOH` noise group has `from_prior: False`** and a smaller `sigma_max: 1` (instead of 3). Even though `init_step: 1`, the initial CCOOH coordinates are centered on the **input** coordinates rather than the denoising space center. This biases generation toward the known approximate pose.
+- **Use case:** When you know the approximate location of the functional group and want the model to refine it rather than placing it from scratch.
+
+#### `unfixed_Glu.yml` — Fix Glu identity, all coordinates free
+
+The 6th residue is constrained to be Glu (all its atoms have fixed types), but no coordinates are fixed anywhere.
+
+Key differences from `fixed_Glu_CCOOH.yml`:
+
+- **Partition (3 parts):** No separate `CCOOH`; instead, all Glu atoms (40–48) are merged into `bbbody_and_136Glu`. Only `bbanchor`, `bbbody_and_136Glu`, and `sc` parts exist.
+- **Fixed:** `node` = `bbanchor` + `bbbody_and_136Glu`; `pos` is **empty**; `edge` = all intra-backbone and backbone–sc pairs.
+- **Noise groups (2):** `bb` (pos_only) maps to `[bbanchor, bbbody_and_136Glu]`; `sc` maps to side chains. No separate CCOOH group needed since Glu atoms move with backbone.
+
+#### Summary of key differences
+
+| Config | Parts | `fixed.pos` | Noise groups | `init_step` | `from_prior` |
+|--------|-------|-------------|--------------|-------------|--------------|
+| `fixed_CCOOH` | 5 (Canchor, COOH, bbanchor, bbbody, sc) | Canchor, COOH | 2 (bb, sc) | 1 | — |
+| `fixed_CCOOH_init0.9` | 5 (same) | Canchor, COOH | 2 (bb, sc) | **0.9** | — |
+| `fixed_Glu_CCOOH` | 4 (CCOOH, bbanchor, bbbody, sc) | CCOOH | 2 (bb, sc) | 1 | — |
+| `unfixed_CCOOH` | 5 (same as fixed_CCOOH) | *(none)* | **3** (bb, CCOOH, sc) | 1 | CCOOH: True |
+| `unfixed_CCOOH_from_inputs` | 5 (same) | *(none)* | **3** (bb, CCOOH, sc) | 1 | CCOOH: **False** |
+| `unfixed_Glu` | 3 (bbanchor, bbbody_and_136Glu, sc) | *(none)* | 2 (bb, sc) | 1 | — |

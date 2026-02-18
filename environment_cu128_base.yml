@@ -1,0 +1,24 @@
+name: pxm_cu128
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.10
+  - pip=24.3.1
+  - easydict=1.9
+  - numpy=1.24
+  - openbabel=3.1.1
+  - pandas=1.5.2
+  - python-lmdb=1.2.1
+  - pyyaml=6.0.2
+  - tqdm=4.64.0
+  - rdkit=2023.9.3
+  - biopython=1.83
+  - networkx=2.8
+  - setuptools<70
+  - scikit-learn=1.1.0
+  - scipy=1.10.1
+  - seaborn=0.12.1
+  - tensorboard=2.20.0
+  - pip:
+      - peptidebuilder==1.1.0
