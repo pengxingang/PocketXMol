@@ -869,7 +869,7 @@ name: uniform
 min: 0.6
 max: 1.0
 ```
-Maps denoising step linearly: $\text{info\_level} = \text{max} - (\text{max} - \text{min}) \times \text{noise\_step}$. Setting `min > 0` ensures the atoms never receive too much noise — useful for preserving known fragment positions.
+Maps denoising step linearly: info_level = max - (max - min) $\times$ noise_step. Setting `min > 0` ensures the atoms never receive too much noise — useful for preserving known fragment positions.
 
 ---
 
