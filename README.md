@@ -1,8 +1,16 @@
 # PocketXMol
 
-This repository provides the original code release for **PocketXMol**, a pocket-interacting foundation model introduced in the paper **Learning fundamental atom interactions for unified modeling of 3D molecule generation** published in *Cell*.
+[![DOI](https://img.shields.io/badge/DOI-10.1016%2Fj.cell.2026.01.003-blue)](https://doi.org/10.1016/j.cell.2026.01.003)
+
+
+This repository provides the code release for **PocketXMol**, a pocket-interacting foundation model introduced in the paper **Unified modeling of 3D molecular generation via atomic interactions with PocketXMol** published in *Cell* (2026).
 
 > This repository is modified from the [MolDiff](https://github.com/pengxingang/MolDiff) repository. We thank the authors for their work.
+
+
+<p align="center">
+  <img src="docs/abstract.png" alt="Graphical Abstract" width="500" />
+</p>
 
 
 ## Capabilities
@@ -102,10 +110,26 @@ A new directory `{exp_name}_{timestamp}` will be created in `outputs_examples/`:
 - [notebooks/](notebooks): Interactive Colab-ready notebooks.
 
 
-##  License / Contributing / Citation
+## License / Contributing / Citation
 
 MIT License. See [LICENSE](LICENSE). 
 
 Pull requests, bug reports, and feedback are very welcome — please feel free to submit a PR! This is a one-person maintained project, so any help is greatly appreciated!!!
 
-Paper cite this article in press as Peng et al., Learning fundamental atom interactions for unified modeling of 3D molecule generation, *Cell* (2026), https://doi.org/10.1016/j.cell.2026.01.003
+<!-- Please cite this article as: Peng et al., Unified modeling of 3D molecular generation via atomic interactions with PocketXMol, *Cell* (2026). https://doi.org/10.1016/j.cell.2026.01.003 -->
+
+### BibTeX entry for citation:
+
+```bibtex
+@article{Peng2026,
+  title = {Unified modeling of 3D molecular generation via atomic interactions with PocketXMol},
+  ISSN = {0092-8674},
+  url = {http://dx.doi.org/10.1016/j.cell.2026.01.003},
+  DOI = {10.1016/j.cell.2026.01.003},
+  journal = {Cell},
+  publisher = {Elsevier BV},
+  author = {Peng,  Xingang and Guo,  Ruihan and Guo,  Fenglin and Wang,  Ziyi and Sun,  Jiayu and Guan,  Jiaqi and Jia,  Yinjun and Xu,  Yan and Huang,  Yanwen and Zhang,  Muhan and Peng,  Jian and Wang,  Xinquan and Han,  Chuanhui and Wang,  Zihua and Ma,  Jianzhu},
+  year = {2026},
+  month = feb 
+}
+```
