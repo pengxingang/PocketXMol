@@ -11,6 +11,9 @@ To set up the environment on Linux (with CUDA 11.7), use [Anaconda](https://docs
 ```bash
 conda env create -f environment.yml
 conda activate pxm
+pip install torch==2.0.0 --index-url https://download.pytorch.org/whl/cu117
+pip install pyg_lib torch_scatter torch_sparse torch_cluster -f https://data.pyg.org/whl/torch-2.0.0+cu117.html
+pip install --no-deps -r requirements.txt
 ```
 
 > **Note:** If you have a different CUDA version, modify the pytorch-related package versions in `environment.yml` before creating the environment.
@@ -32,12 +35,12 @@ pip install lightning torch_geometric
 pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.7.0+cu128.html
 ```
 
-
 ### Option B: Manual Installation (Pip)
 
 If you need custom versions (e.g., specific CUDA/PyTorch/PyG pins), install packages step by step.
 
 For example, for CUDA 12.6 (Python 3.10):
+
 ```bash
 # PyTorch for CUDA 12.6
 pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu126
@@ -58,40 +61,46 @@ pip install lmdb==1.7.5 easydict==1.9 numpy==1.24 pandas==1.5.2 scipy==1.10.1
 pip install tensorboard==2.20.0  # for training only
 ```
 
-
 ## 2. Data & Model Weights
 
 All training/test data and model weights are available on [Zenodo](https://zenodo.org/records/17801271).
 
 ### For Inference/Sampling (Required)
+
 The `model_weights.tar.gz` archive contains trained checkpoints. Download and extract it:
 
 ```bash
 wget -c https://zenodo.org/records/17801271/files/model_weights.tar.gz
 tar -zxvf model_weights.tar.gz
 ```
+
 *Creates: `data/trained_models/` containing the weights.*
 
 *(Note: Simple example data is already included in `data/examples` inside this repo.)*
 
 ### For Benchmarking (Optional)
+
 To run benchmarks on standard test sets (PoseBusters, CrossDocked, etc.), download `data_test.tar.gz`:
 
 ```bash
 wget -c https://zenodo.org/records/17801271/files/data_test.tar.gz
 tar -zxvf data_test.tar.gz
 ```
+
 *Creates:*
-*   `data/test`: Benchmark metadata
-*   `data/csd`, `data/geom`, `data/moad`, etc.: Processed test sets.
+
+* `data/test`: Benchmark metadata
+* `data/csd`, `data/geom`, `data/moad`, etc.: Processed test sets.
 
 ### For Training (Optional)
+
 To train on the reduced demonstration dataset, download `data_train_processed.tar.gz`:
 
 ```bash
 wget -c https://zenodo.org/records/17801271/files/data_train_processed.tar.gz
 tar -zxvf data_train_processed.tar.gz
 ```
+
 *Creates: `data_train` with reduced training sets.*
 
 **Full Dataset Training:**
