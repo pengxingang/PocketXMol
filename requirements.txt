@@ -1,0 +1,8 @@
+psutil==7.2.2
+pytorch-lightning==2.3.3
+lightning-utilities==0.11.9
+fsspec==2025.3.0
+torchmetrics==1.5.2
+lightning==2.3.3
+torch_geometric==2.3.1
+peptidebuilder==1.1.0

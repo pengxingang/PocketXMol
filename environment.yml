@@ -21,5 +21,3 @@ dependencies:
   - scipy=1.8.0
   - seaborn=0.12.1
   - tensorboard
-  - pip:
-      - peptidebuilder==1.1.0
