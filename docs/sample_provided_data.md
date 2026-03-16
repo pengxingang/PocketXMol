@@ -34,6 +34,7 @@ This guide covers how to run various generation tasks using the example data pro
 - [4. Defining Custom Tasks](#4-defining-custom-tasks)
   - [4.1 How to define a custom task](#41-how-to-define-a-custom-task)
   - [4.2 Walkthrough of the example configs](#42-walkthrough-of-the-example-configs)
+- [5. Post-processing: NAA Peptide SDF→PDB Conversion](#5-post-processing-naa-peptide-sdfpdb-conversion)
 
 ---
 
@@ -87,7 +88,7 @@ python scripts/believe_use_pdb.py \
 ```
 
 - **`--exp_name`**: Partial match for your experiment directory name (e.g., `pepdesign_pxm` matches `pepdesign_pxm_20241201_211051`). The script searches `result_root` for directories containing this string.
-- **`--config`**: Choose `tuned_cfd.yml` (recommended) or `flex_cfd.yml`.
+- **`--config`**: Choose `tuned_cfd.yml` (tuned ranker) or `flex_cfd.yml` (using flexible docking noise for scoring).
 - **Output**: Scores are saved to `ranking/*.csv` inside the experiment folder.
 
 ---
@@ -135,7 +136,8 @@ Example configs are located in `configs/sample/examples/`.
 ### 2.3 Peptide Design
 | Config File | Description |
 |---|---|
-| `pepdesign_denovo.yml` | De novo peptide generation |
+| `pepdesign_denovo.yml` | De novo linear peptide generation |
+| `pepdesign_cyclic_denovo.yml` | De novo cyclic peptide generation |
 | `pepdesign_fix_pos.yml` | Constrained: fixed positions and types for some residues |
 | `pepdesign_fix_type.yml` | Constrained: fixed residue types (positions flexible) |
 | `pepdesign_fix_pos_and_type.yml` | Constrained: some residues fixed, some types fixed (positions flexible) |
@@ -225,7 +227,8 @@ data:
 | `SMILES` string | Chemical structure string | `c1ccccc1` | Docking |
 | `.pdb` file path | Peptide structure file | `data/peptide.pdb` | Peptide docking, peptide design |
 | `pepseq_<seq>` | Peptide sequence | `pepseq_DTVFALFW` | Peptide docking |
-| `peplen_<n>` | Linear peptide length | `peplen_10` | De novo peptide design |
+| `peplen_<n>` | Linear peptide length | `peplen_10` | De novo linear peptide design |
+| `cycpeplen_<n>` | Cyclic peptide length | `cycpeplen_12` | De novo cyclic peptide design |
 | `None` / omitted | No input ligand | — | De novo SBDD |
 
 #### `data.is_pep`
@@ -575,6 +578,12 @@ task:
 > **Important:** When using `fix_pos` or `fix_type_only`, you must also set `transforms.variable_sc_size.not_remove` to include the side-chain atom indices of all constrained residues. This prevents those atoms from being removed during variable-size sampling. You can get atom indices in PyMOL by selecting residues and running: `iterate (sele and sc.), print(rank, end=',')`.
 
 > See `pepdesign_denovo.yml`, `pepdesign_invfold.yml`, `pepdesign_sc_pack.yml` for full examples.
+
+**Note on outputs**:
+For peptide-related tasks, the output format contains both `.sdf` and `.pdb` files. The `.pdb` file is converted from `.sdf` using `openbabel`.
+But for peptides with non-standard residues or bad structures (file name containing `-nonstd`, `-bad`, or `-incomp`), the conversion may fail.
+If you focus on these peptides, please see [Section 5](#5-post-processing-naa-peptide-sdfpdb-conversion) for post-processing steps.
+
 
 ---
 
@@ -1132,3 +1141,45 @@ Key differences from `fixed_Glu_CCOOH.yml`:
 | `unfixed_CCOOH` | 5 (same as fixed_CCOOH) | *(none)* | **3** (bb, CCOOH, sc) | 1 | CCOOH: True |
 | `unfixed_CCOOH_from_inputs` | 5 (same) | *(none)* | **3** (bb, CCOOH, sc) | 1 | CCOOH: **False** |
 | `unfixed_Glu` | 3 (bbanchor, bbbody_and_136Glu, sc) | *(none)* | 2 (bb, sc) | 1 | — |
+
+---
+
+## 5. Post-processing: NAA Peptide SDF→PDB Conversion
+
+By default, the generated molecules are saved in `.sdf` format with complete atom and bond information.
+For peptides, `openbabel` is used to convert `.sdf` to `.pdb` format with annotation of residue names and atom names.
+However, for peptides containing **non-standard amino acids (NAA)**, `openbabel` may fail and resulted in incomplete or incorrect PDB files.
+
+If you are focusing on NAA design, please use the `sdf2pdb_robust.py` post-processing script, which re-annotates residue names and atom names by matching generated fragments against the CCD (Chemical Component Dictionary) database in `data/ccd/`.
+
+```bash
+python scripts/sdf2pdb_robust.py \
+    --gen_path outputs_use/pepdesign_pxm_20241201_222214 \
+    --len_pep 10
+```
+
+**Arguments:**
+
+| Argument | Description |
+|----------|--------------|
+| `--gen_path` | Path to the generation output directory (containing `gen_info.csv`) |
+| `--len_pep` | Peptide length (number of residues); used to locate the backbone SMARTS pattern |
+
+**How it works:**
+
+1. Reads `gen_info.csv` to find all generated molecules tagged as `nonstd` (non-standard).
+2. For each molecule, reads the corresponding `_mol.sdf` file from the `*_SDF/` subdirectory.
+3. Identifies the peptide backbone via a SMARTS pattern of length `--len_pep` residue units.
+4. Splits the backbone at peptide bonds to extract individual residue fragments.
+5. Matches each fragment against the CCD amino acid database (`data/ccd/aa_fgs_db.pkl`, `data/ccd/smiles_aa.csv`) to assign the correct 3-letter residue name.
+6. Assigns standard PDB atom names (`data/ccd/atom_name_db.pkl`) where available, or falls back to element symbols.
+7. Writes output PDB files to a `PDB_robust/` subdirectory inside `--gen_path`.
+
+**Output:**
+- `{gen_path}/PDB_robust/*.pdb`: Re-annotated PDB files with correct residue names and atom names.
+- `{gen_path}/PDB_robust/*_sm.csv`: CSV files listing the identified residue name and SMILES for each residue.
+
+> **Note:** This script depends on `data/ccd/` (included in the repository), which contains three reference files:
+> - `aa_fgs_db.pkl` — RDKit fingerprint database for amino acid identification
+> - `smiles_aa.csv` — canonical SMILES for all standard amino acids
+> - `atom_name_db.pkl` — PDB atom naming templates per residue type

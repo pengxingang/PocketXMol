@@ -8,13 +8,13 @@ sample:
 
 data:
   protein_path: data/examples/peptide/3bik_A.pdb
-  input_ligand: peplen_10  # define peptide lengths
+  input_ligand: cycpeplen_8  # de novo cyclic peptide with 8 residues
   is_pep: True
   pocket_args:
     ref_ligand_path: data/examples/peptide/3bik_A_pocket_coord.sdf
     radius: 20
   pocmol_args:
-    data_id: pepdesign_3bik
+    data_id: pepdesign_cyclic_3bik
     pdbid: 3bik
 
 

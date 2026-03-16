@@ -107,7 +107,7 @@ def reconstruct_pdb_from_generated(mol_info, check_atom=True, gt_path=''):
     # get rdmol first
     try:
         with time_limit(300):
-            rdmol = reconstruct_from_generated_with_edges(mol_info)
+            rdmol = reconstruct_from_generated_with_edges(mol_info, is_pep=True)
     except TimeoutException as e:
         print('Timeout for reconstructing mol')
         raise MolReconsError()
@@ -372,7 +372,7 @@ def reconstruct_pos(mol_info, in_mol=None):
     return mol
 
 
-def reconstruct_from_generated_with_edges(mol_info, check_validity=True, add_edge=None, in_mol=None):
+def reconstruct_from_generated_with_edges(mol_info, check_validity=True, add_edge=None, in_mol=None, is_pep=False):
     # for conf or dock
     if mol_info['task'] in ['conf', 'dock']:
         try:
@@ -447,23 +447,24 @@ def reconstruct_from_generated_with_edges(mol_info, check_validity=True, add_edg
                         print('Timeout for reconstructing mol')
                         raise MolReconsError()
 
-        # valence error for N 
-        if not fixed:
-            try:
-                with time_limit(300):
-                    mol, fixed = fix_valence(mol)
-            except TimeoutException as e:
-                print('Timeout for reconstructing mol')
-                raise MolReconsError()
-            
-        # print('s2')
-        if not fixed:
-            try:
-                with time_limit(300):
-                    mol, fixed = fix_aromatic(mol, True)
-            except TimeoutException as e:
-                print('Timeout for reconstructing mol')
-                raise MolReconsError()
+        if not is_pep:  # only for small mols, skip further fixing for peptides
+            # valence error for N 
+            if not fixed:
+                try:
+                    with time_limit(300):
+                        mol, fixed = fix_valence(mol)
+                except TimeoutException as e:
+                    print('Timeout for reconstructing mol')
+                    raise MolReconsError()
+                
+            # print('s2')
+            if not fixed:
+                try:
+                    with time_limit(300):
+                        mol, fixed = fix_aromatic(mol, True)
+                except TimeoutException as e:
+                    print('Timeout for reconstructing mol')
+                    raise MolReconsError()
             
         try:
             Chem.SanitizeMol(mol)
@@ -517,6 +518,8 @@ def fix_valence(mol):
         index = N4_valence.findall(err.args[0])
         if len(index) > 0:
             mol.GetAtomWithIdx(int(index[0])).SetFormalCharge(1)
+        else:
+            break
     return mol, fixed
 
 

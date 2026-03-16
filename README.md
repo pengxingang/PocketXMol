@@ -18,7 +18,7 @@ This repository provides the code release for **PocketXMol**, a pocket-interacti
 PocketXMol is an AI generative model that learns fundamental **atom interactions**, enabling applications governed by atom interactions within a pocket, including:
 
 - **Structure prediction**: Small-molecule docking, peptide docking, and molecular conformation generation.
-- **Molecular design**: Structure-based drug design (SBDD), fragment linking/growing, PROTAC design, de novo peptide design, and peptide inverse folding.
+- **Molecular design**: Structure-based drug design (SBDD), fragment linking/growing, PROTAC design, de novo linear/cyclic peptide design, and peptide inverse folding.
 - **Complex manipulation**: Combining prediction and design, such as partial structure prediction/generation.
 
 
