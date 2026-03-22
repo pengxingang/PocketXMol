@@ -211,7 +211,7 @@ def get_pocmol_data(mol, pdb, data_id='', pdbid='', return_mol=False):
             mol = 'NCC(=O)' * n_res
             mol = get_make_mol_from_smiles(mol)
         # elif mol.startswith('peptide'):  # peptide sequence
-        elif mol.startswith('cycpeplen_'): # pep design. make dummy pep with len
+        elif mol.startswith('cycpeplen_'): # pep design. make dummy cyclic pep with len
             n_res = int(mol.split('_')[1])
             mol = 'N1CC(=O)' + ('NCC(=O)' * (n_res-2)) + 'NCC1(=O)'
             mol = get_make_mol_from_smiles(mol)

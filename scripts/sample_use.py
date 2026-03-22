@@ -142,7 +142,7 @@ def get_input_data(protein_path,
             # Verify consistency (sanity check)
             assert torch.isclose(pocmol_data['pos_all_confs'][0], pep_info['peptide_pos'], 1e-2).all(), \
                 'Molecule and peptide atoms may not match'
-        elif input_ligand.startswith('peplen_'):  # Peptide design
+        elif 'peplen_' in input_ligand:  # Peptide design
             pep_info = add_pep_bb_data(pocmol_data)
         else:  # pepseq_{xxx} - peptide docking from sequence
             pep_info = {}
